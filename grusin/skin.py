@@ -75,27 +75,27 @@ DEFAULT_SKIN = {
         },
         'layout': {
             'size': (60, 20),
-            'padding': (2, 2, 10, 2),
+            'padding': (8, 8, 8, 8),
             'margin': (1, 1, 1, 1),
             'fit': True,
         },
         'normal': {
-            'color': (64, 64, 64),
+            'color': (32, 32, 32),
             'backcolor': (232, 232, 232),
             'bordercolor': (32, 32, 32),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'hilighted': {
-            'color': (0, 0, 255),
+            'color': (64, 64, 64),
             'backcolor': (255, 255, 255),
             'bordercolor': (0, 0, 0),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'pressed': {
-            'color': (255, 0, 0),
-            'backcolor': (160, 160, 160),
+            'color': (32, 32, 32),
+            'backcolor': (192, 192, 192),
             'bordercolor': (0, 0, 0),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
@@ -116,7 +116,7 @@ DEFAULT_SKIN = {
         'erase_background': True,
         'render_layers': ('ABOVE_BACKGROUND',),
         'style': {
-            'size': 'small',
+            'size': 'medium',
             'valign': 'MIDDLE',
             'halign': 'RIGHT',
             'bold': False,
@@ -132,7 +132,7 @@ DEFAULT_SKIN = {
         'normal': {
             'color': (32, 32, 32),
             'checkmark': {
-                'color': (96, 96, 0),
+                'color': (0, 96, 0),
                 'image_area': (0, 0, 1, 1),
                 'image_kind': 'IMK_IMAGE'
             },
@@ -142,33 +142,33 @@ DEFAULT_SKIN = {
             'image_kind': 'IMK_NINEPATCH'
         },
         'hilighted': {
-            'color': (128, 128, 128),
+            'color': (32, 32, 32),
             'checkmark': {
-                'color': (96, 96, 0),
+                'color': (0, 128, 0),
                 'image_area': (0, 0, 1, 1),
                 'image_kind': 'IMK_IMAGE'
             },
-            'backcolor': (160, 160, 160),
-            'bordercolor': (128, 128, 128),
+            'backcolor': (255, 255, 255),
+            'bordercolor': (32, 32, 32),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'pressed': {
-            'color': (128, 128, 128),
+            'color': (0, 0, 0),
             'checkmark': {
-                'color': (96, 96, 0),
+                'color': (0, 64, 0),
                 'image_area': (0, 0, 1, 1),
                 'image_kind': 'IMK_IMAGE'
             },
-            'backcolor': (160, 160, 160),
-            'bordercolor': (128, 128, 128),
+            'backcolor': (255, 255, 255),
+            'bordercolor': (32, 32, 32),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'disabled': {
             'color': (128, 128, 128),
             'checkmark': {
-                'color': (96, 96, 0),
+                'color': (128, 128, 128),
                 'image_area': (0, 0, 1, 1),
                 'image_kind': 'IMK_IMAGE'
             },

@@ -242,6 +242,7 @@ class SingletonMeta(type):
         return cls._instance
 
 
+# rndr
 class RendererBase:
 
     @classmethod
@@ -424,7 +425,7 @@ class RendererBase:
             font.set_italic(element.style.italic)
             font.set_underline(element.style.underline)
             width, height = font.size(control.text)
-            rect: Rectangle = Rectangle(bounds.left, bounds.top, width, height).reduce(control.padding).align_to(bounds, alignment)
+            rect: Rectangle = Rectangle(bounds.left, bounds.top, width, height).align_to(bounds, alignment)
             s: pg.Surface = font.render(control.text, True, button.color)
 
             surface.blit(s, rect.location)
@@ -468,6 +469,9 @@ class RendererBase:
 
             pg.draw.rect(surface, checkbox.backcolor, box_rect, 0)
             pg.draw.rect(surface, checkbox.bordercolor, box_rect, 1)
+            if control.checked:
+                pg.draw.rect(surface, checkbox.checkmark.color, box_rect.shrink(3), 0)
+
             # pg.draw.rect(surface, RED, bounds, 1)
             surface.blit(s, rect.location)
 
@@ -1062,18 +1066,18 @@ class Rectangle:
         return self
 
     def grow(self, ammount: int) -> 'Rectangle':
-        self.left -= spacing
-        self.width += spacing * 2
-        self.top -= spacing
-        self.height += spacing * 2
+        self.left -= amount
+        self.width += amount * 2
+        self.top -= amount
+        self.height += amount * 2
 
         return self
 
     def shrink(self, amount: int) -> 'Rectangle':
-        self.left += spacing
-        self.width -= spacing * 2
-        self.top += spacing
-        self.height -= spacing * 2
+        self.left += amount
+        self.width -= amount * 2
+        self.top += amount
+        self.height -= amount * 2
 
         return self
 
@@ -2053,17 +2057,6 @@ class ButtonBase(Control):
     def pressed_state(self) -> ButtonPressedState:
         return self._pressed_state
 
-
-class PushButton(ButtonBase):
-
-    class PressedEvent(EventBase):
-        pass
-
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
-        super(PushButton, self).__init__(parent, name)
-        renderer: RendererBase = Application().get_renderer()
-        self._padding = Spacing(*renderer.get_element(self).layout.padding)
-
     def get_state(self) -> str:
         if self.enabled:
             return {
@@ -2089,7 +2082,6 @@ class PushButton(ButtonBase):
                 is_hovering: bool = params[0]
                 if is_hovering:
                     self._pressed_state = BPS_HILIGHTED
-                    self._on_pressed(self, None)
                 else:
                     self._pressed_state = BPS_NORMAL
 
@@ -2097,7 +2089,34 @@ class PushButton(ButtonBase):
             if self.enabled:
                 self._pressed_state = BPS_NORMAL
 
-        return super(PushButton, self).process_message(message, *params)
+        return super().process_message(message, *params)
+
+
+class PushButton(ButtonBase):
+
+    class PressedEvent(EventBase):
+        pass
+
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
+        super(PushButton, self).__init__(parent, name)
+        renderer: RendererBase = Application().get_renderer()
+        self._padding = Spacing(*renderer.get_element(self).layout.padding)
+        size: Size = renderer.measure_text(self, self.text)
+        self._bounds.size = size
+        self._bounds.expand(self._padding)
+
+    def process_message(self, message: Message, *params) -> Any:
+
+        if message is Message.MOUSE_RELEASE:
+            if self.enabled:
+                is_hovering: bool = params[0]
+                if is_hovering:
+                    self._pressed_state = BPS_HILIGHTED
+                    self._on_pressed(self, None)
+                else:
+                    self._pressed_state = BPS_NORMAL
+
+        return super().process_message(message, *params)
 
 
 class CheckBox(ButtonBase):
@@ -2116,7 +2135,7 @@ class CheckBox(ButtonBase):
     def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
         super().__init__(parent, name)
 
-        self.process_message(Message.TEXTCHANGED, self._name)
+        self.checked = True
 
     @property
     def text(self) -> str:
@@ -2201,6 +2220,10 @@ class CheckBox(ButtonBase):
         else:
             return super().process_message(message, *params)
 
+
+class ToolButton(ButtonBase):
+
+    pass
 
 class ScrollableControl(Control):
     # has display_bounds, scroll_position, scrollbars (non-clients)
@@ -2415,6 +2438,20 @@ class ContainerControl(Control):
             return super().process_message(message, *params)
 
 
+class ButtonGroup(ContainerControl):
+
+    _behavior: Behavior = ContainerControl._behavior | BE_FIXED_SIZE
+
+    def process_message(self, message: Message, *params) -> Any:
+        if message is Message.ADD_CHILD:
+            child: 'Control' = params[0]
+            if not isinstance(child, ToolButton):
+                raise TypeError("ButtonGroup can have only ToolButtons as children.")
+            if child not in self._children:
+                self._children.append(child)
+            return True
+
+
 class Panel(ContainerControl, ScrollableControl):
 
     _behavior: Behavior = ContainerControl._behavior
@@ -2458,7 +2495,7 @@ if __name__ == '__main__':
 
             with PushButton():
                 this.location = Point(10, 20)
-                this.size = Size(100, 100)
+                # this.size = Size(110, 20)
 
                 @PushButton.MouseEnterEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
@@ -2479,7 +2516,7 @@ if __name__ == '__main__':
 
             with PushButton():
                 this.location = Point(10, 20)
-                this.size = Size(100, 100)
+                # this.size = Size(110, 20)
 
                 @PushButton.MouseEnterEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
