@@ -105,7 +105,35 @@ HT_SIZEBORDER = HitTest.SIZEBORDER
 HT_CRTLBOX = HitTest.CRTLBOX
 
 
+class LayoutNext(Enum):
+    """LayoutNext enumeration.
+
+    Used to control the placement of child controls in the parent's client area. The
+    placement is always relative to the current control being placed or to the current
+    row of controls placed.
+    SAMELINE: places the next control at the left, aligned to the TOP of current control;
+    BELLOW: places the next control below the currrent control, LEFT aligned to the
+            current control;
+    NEWLINE: places the next control at the LEFT of the parent's client area. A row of
+             controls has the height of the control with the larger height.
+    """
+    SAMELINE = 0
+    BELLOW = 1
+    NEWLINE = 2
+
+
 class RenderLayer(IntFlag):
+    """RenderLayer enumeration.
+
+    Used to specify the render stages of a control and wich layer is currently being
+    rendered.
+    BACKGROUND: normally used to render anything tha goes below its contents.
+    ABOVE_BACKGROUND: used to render the control contents before its children, if any.
+    BELOW_FOREGROUND: used to render the control contents after its children, if any.
+    FOREGROUND: normally used to render anything that goes above its contents.
+
+    Note: ABOVE_BACKGROUND and BELOW_FOREGROUND are mutually exclusive.
+    """
     NONE = 0
     BACKGROUND = 1
     ABOVE_BACKGROUND = 2    # immediately after background and immediately before client/nonclient
@@ -121,6 +149,17 @@ RL_FOREGROUND = RenderLayer.FOREGROUND
 
 
 class Behavior(IntFlag):
+    """Behavior enumeration.
+
+    Used to specify some major control characteristics.
+    SELECTABLE: the control can receive focus;
+    FIXED_WIDTH: the control's width can't be changed except by its own code.
+    FIXED_HEIGHT: the control's height can't be changed except by its own code.
+    FIXED_SIZE: the control's size can't be changed except by its own code.
+    MODAL: the control can't lose focus unless it's dismissed.
+    MODELESS: the control can't be place behind others, even when loses focus.
+    NON_CLIENT: the control is a component of it's parent.
+    """
     SELECTABLE = 1
     FIXED_WIDTH = 2
     FIXED_HEIGHT = 4
@@ -140,6 +179,17 @@ BE_NON_CLIENT = Behavior.NON_CLIENT
 
 
 class Scrollbars(IntFlag):
+    """Scrollbars enumeration.
+
+    Used to specify the behavior of scrollbars (its visibility) on scrollable controls.
+    AUTO: scrollbars are hidden or shown automatically as needed.
+    ALWAYS_VERTICAL: vertical scrollbars never hides
+    ALWAYS_HORIZONTAL: horizontal scrollbars never hides
+    ALWAYS: scrollbars are always visible
+    NEVER_VERTICAL: vertical scrollbars are always hidden
+    NEVER_HORIZONTAL: horizontal scrollbars are always hidden
+    NEVER: scrollbars are always hidden
+    """
     AUTO = 0
     ALWAYS_VERTICAL = 1
     ALWAYS_HORIZONTAL = 2
@@ -159,6 +209,10 @@ SB_NEVER = Scrollbars.NEVER
 
 
 class BoundsChange(IntFlag):
+    """BoundsChanged enumeration.
+
+    Used in Rectangle.set_bounds() method to 
+    """
     NONE = 0
     LEFT = 1
     TOP = 2
@@ -240,6 +294,17 @@ class SingletonMeta(type):
         if cls._instance is None:
             cls._instance = super().__call__(*args, **kwargs)
         return cls._instance
+
+
+class LayoutCursor:
+
+    def __init__(self, left: x, top: int) -> None:
+        self.left: int = left
+        self.top: int = top
+        self.line_height: int = 0
+        self.next: LayoutNext = LON_SAMELINE
+
+
 
 
 # rndr
@@ -1232,6 +1297,7 @@ class Namespace(object):
         return name in self._dict
 
 
+#clsapp
 class Application(metaclass=SingletonMeta):
 
     def __init__(self):
