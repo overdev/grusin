@@ -468,7 +468,7 @@ class RendererBase:
 
             pg.draw.rect(surface, checkbox.backcolor, box_rect, 0)
             pg.draw.rect(surface, checkbox.bordercolor, box_rect, 1)
-            pg.draw.rect(surface, RED, bounds, 1)
+            # pg.draw.rect(surface, RED, bounds, 1)
             surface.blit(s, rect.location)
 
 class VecBase:

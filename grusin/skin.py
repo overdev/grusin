@@ -116,7 +116,7 @@ DEFAULT_SKIN = {
         'erase_background': True,
         'render_layers': ('ABOVE_BACKGROUND',),
         'style': {
-            'size': 'medium',
+            'size': 'small',
             'valign': 'MIDDLE',
             'halign': 'RIGHT',
             'bold': False,
@@ -130,14 +130,14 @@ DEFAULT_SKIN = {
             'fit': True,
         },
         'normal': {
-            'color': (128, 128, 128),
+            'color': (32, 32, 32),
             'checkmark': {
                 'color': (96, 96, 0),
                 'image_area': (0, 0, 1, 1),
                 'image_kind': 'IMK_IMAGE'
             },
-            'backcolor': (160, 160, 160),
-            'bordercolor': (128, 128, 128),
+            'backcolor': (255, 255, 255),
+            'bordercolor': (32, 32, 32),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
