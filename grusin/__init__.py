@@ -4,8 +4,8 @@ import sys
 import pygame as pg
 from collections import OrderedDict
 from contextlib import contextmanager
-from typing import Any, Tuple, Optional, Union, List, Callable
-from enum import IntFlag, Enum
+from typing import Any, Tuple, Optional, Union, List, Callable, Dict
+from enum import IntFlag, Enum, IntEnum
 from skin import DEFAULT_SKIN
 
 DEFAULT = object()
@@ -20,7 +20,7 @@ MB_WHEEL_DOWN = 5
 class GrUsInRendererError(Exception):
     pass
 
-class Message(Enum):
+class Message(IntEnum):
     # Mouse related
     MOUSE_FIRST = 0x1
     HIT_TEST = MOUSE_FIRST + 0
@@ -310,6 +310,42 @@ BTS_OFF = ButtonToggleState.OFF
 BTS_UNDEFINED = ButtonToggleState.UNDEFINED
 
 
+class ButtonGroupKind(Enum):
+    """ButtonKind enumeration.
+
+    Used to specify a ButtonGroup item's kind.
+    PUSHBUTTON: the ButtonGroup item behaves like a PushButton;
+    TOGGLEBUTTON: the ButtonGroup item behaves like a ToggleButton;
+    DROPDOWNBUTTON: the ButtonGroup item behaves like a DropDownButton;
+    """
+    PUSHBUTTON = 0
+    TOGGLEBUTTON = 1
+    DROPDOWNBUTTON = 3
+
+
+BK_PUSHBUTTON = ButtonGroupKind.PUSHBUTTON
+BK_TOGGLEBUTTON = ButtonGroupKind.TOGGLEBUTTON
+BK_DROPDOWNBUTTON = ButtonGroupKind.DROPDOWNBUTTON
+
+
+class ButtonGroupDisplay(Enum):
+    """ButtonDisplay enumeration.
+
+    Used to specify how the ButtonGroup item is rendered: text only, icon only or both.
+    BD_TEXT: displays only the button caption;
+    BD_ICON: displays only the button icon;
+    BD_BOTH: displays the button icon and text;
+    """
+    TEXT = 0
+    ICON = 1
+    BOTH = 2
+
+
+BGD_TEXT = ButtonGroupDisplay.TEXT
+BGD_ICON = ButtonGroupDisplay.ICON
+BGD_BOTH = ButtonGroupDisplay.BOTH
+
+
 class CheckBoxState(Enum):
     """CheckBoxState enumeration.
 
@@ -382,6 +418,7 @@ class RendererBase:
     @classmethod
     def initialize_display(cls, size: 'Size', caption: str, **kwargs) -> 'RendererBase':
         pg.display.set_mode(size, kwargs.get('flags', 0), kwargs.get('depth', 32))
+        pg.display.set_caption(caption, caption)
         return cls(kwargs.get('skin', DEFAULT_SKIN))
 
     def __init__(self, skin: Union[dict, OrderedDict, 'Namespace']) -> None:
@@ -400,7 +437,7 @@ class RendererBase:
         elif isinstance(skin, Namespace):
             self._skin = skin
         else:
-            raise TypeError("Unsupported value type: {cls}".format(skin.__class__.__name__))
+            raise TypeError("Unsupported value type: {cls}".format(cls=skin.__class__.__name__))
 
         self._guifont: Namespace = Namespace()
         self._textfont: Namespace = Namespace()
@@ -478,7 +515,7 @@ class RendererBase:
         font.set_bold(element.style.bold)
         font.set_italic(element.style.italic)
         font.set_underline(element.style.underline)
-        return Size(*font.size(control.text))
+        return Size(*font.size(text))
 
     def add_renderer(self, cls_name: str, element: str) -> None:
         if cls not in self._render_methods:
@@ -1111,7 +1148,7 @@ class Rectangle:
         sl, st, sw, sh = self
         ol, ot, ow, oh = other
 
-        if (sl > ol + ow or ol > sl + sw or st > ot + oh or ot > st + sh):
+        if sl > ol + ow or ol > sl + sw or st > ot + oh or ot > st + sh:
             return False
         return True
 
@@ -1199,7 +1236,7 @@ class Rectangle:
 
         return self
 
-    def grow(self, ammount: int) -> 'Rectangle':
+    def grow(self, amount: int) -> 'Rectangle':
         self.left -= amount
         self.width += amount * 2
         self.top -= amount
@@ -1517,9 +1554,9 @@ class UIRuntime(metaclass=SingletonMeta):
         self._controls.remove(control)
         self._controls.append(control)
 
+    @staticmethod
     def set_invalidated_rectangle(self, rectangle: Rectangle) -> None:
         Application().get_renderer().add_invalidated_rect(rectangle)
-        # self._invalidated.append(pg.Rect(*rectangle))
 
     #refresher
     def validate(self) -> None:
@@ -1532,7 +1569,7 @@ class UIRuntime(metaclass=SingletonMeta):
 
         renderer.update()
 
-    def erase(self, control: 'Control', erase_rectangle: 'Rectangle') -> None:
+    def erase(self,control: 'Control', erase_rectangle: 'Rectangle') -> None:
         renderer: RendererBase = Application().get_renderer()
         renderer.push_cliprect(erase_rectangle)
         renderer.clear(renderer.erase_color)
@@ -1574,7 +1611,7 @@ class UIRuntime(metaclass=SingletonMeta):
                     hov, hit = control.process_message(Message.HIT_TEST, Point(*event.pos), Point(*event.rel))
                     if hov:
                         hovered = hov
-                        hittest = hit
+                        hittest = hit       # no utlilty to this ATM
 
                 if self._captured is None:
                     if hovered is not self._hovered:
@@ -2613,18 +2650,101 @@ class ContainerControl(Control):
             return super().process_message(message, *params)
 
 
-class ButtonGroup(ContainerControl):
+class ButtonGroup(Control):
 
-    _behavior: Behavior = ContainerControl._behavior | BE_FIXED_SIZE
+    _behavior: Behavior = Control._behavior | BE_FIXED_SIZE
+
+    class ItemActionEvent(EventBase):
+        pass
+
+    class ButtonGroupItem:
+
+        def __init__(self, owner: 'ButtonGroup', name: str=DEFAULT) -> None:
+            self._kind: ButtonGroupKind = BK_PUSHBUTTON
+            self._enabled: bool = True
+            self._pressed_state: ButtonPressedState = BPS_NORMAL
+            self._toggle_state: ButtonToggleState = BTS_OFF
+            self._caption: str = "Item"
+            self._display: ButtonGroupDisplay = BGD_ICON
+            self._tooltip: str = "Button group item."
+            self._name: str = owner.get_item_default_name(self) if name is DEFAULT else name
+
+        @property
+        def kind(self) -> 'ButtonGroupKind':
+            return self._kind
+
+        @kind.setter
+        def kind(self, value: 'ButtonGroupKind') -> None:
+            self._kind = value
+
+        @property
+        def enabled(self) -> 'bool':
+            return self._enabled
+
+        @enabled.setter
+        def enabled(self, value: bool) -> None:
+            self._enabled = value
+
+        @property
+        def pressed_state(self) -> 'ButtonPressedState':
+            return self._pressed_state
+
+        @pressed_state.setter
+        def pressed_state(self, value: 'ButtonPressedState') -> None:
+            self._pressed_state = value
+
+        @property
+        def toggled_state(self) -> 'ButtonToggleState':
+            return self._toggle_state
+
+        @toggled_state.setter
+        def toggled_state(self, value: 'ButtonToggleState') -> None:
+            self._toggle_state = value
+
+        @property
+        def caption(self) -> str:
+            return self._caption
+
+        @caption.setter
+        def caption(self, value: str) -> None:
+            self._caption = value
+
+        @property
+        def display(self) -> ButtonGroupDisplay:
+            return self._display
+
+        @display.setter
+        def display(self, value: ButtonGroupDisplay) -> None:
+            self._display = value
+
+    def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT) -> None:
+        super(ButtonGroup, self).__init__(parent, name)
+        self._items: List[ButtonGroup.ButtonGroupItem] = []
+        self._index: int = -1
+        self._item_counter: int = 0
+
+    def get_item_default_name(self, item: 'ButtonGroup.ButtonGroupItem') -> str:
+        name: str = {
+            BK_PUSHBUTTON: 'pushbuttonitem{}',
+            BK_TOGGLEBUTTON: 'togglebuttonitem{}',
+            BK_DROPDOWNBUTTON: 'dropdownbuttonitem{}',
+        }.get(item.kind)
+        self._item_counter += 1
+        return name.format(self._item_counter)
+
+    def add(self, kind: ButtonGroupKind=BK_PUSHBUTTON, enabled: bool=True, caption: str="Item",
+            display: ButtonGroupDisplay=BGD_ICON, name:str=DEFAULT) -> None:
+        bgi: ButtonGroup.ButtonGroupItem = ButtonGroup.ButtonGroupItem(self, name)
+        bgi.kind = kind
+        bgi.enabled = enabled
+        bgi.caption = caption
+        bgi.display = display
+        if name is not DEFAULT:
+            bgi.name = name
+        self._items.append(bgi)
 
     def process_message(self, message: Message, *params) -> Any:
-        if message is Message.ADD_CHILD:
-            child: 'Control' = params[0]
-            if not isinstance(child, ToolButton):
-                raise TypeError("ButtonGroup can have only ToolButtons as children.")
-            if child not in self._children:
-                self._children.append(child)
-            return True
+        pass
 
 
 class Panel(ContainerControl, ScrollableControl):
@@ -2705,5 +2825,5 @@ if __name__ == '__main__':
                 @CheckBox.CheckedEvent.handler
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
                     sender.text = repr(pg.time.get_ticks())
-                    print("Checked". sender)
+                    print("Checked", sender)
 
