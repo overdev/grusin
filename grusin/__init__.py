@@ -211,7 +211,14 @@ SB_NEVER = Scrollbars.NEVER
 class BoundsChange(IntFlag):
     """BoundsChanged enumeration.
 
-    Used in Rectangle.set_bounds() method to 
+    Used in Rectangle.set_bounds() method to specify wich rect coordinates had its
+    values changed. This allows to change a rect coordinate without moving the rect
+    as it is the normal behavior when changing values directly.
+    NONE: Nothing has changed;
+    LEFT: The left coordinate changed;
+    TOP: The top coordinate changed;
+    RIGHT: The right coordinate changed;
+    BOTTOM: The bottom coordinate changed;
     """
     NONE = 0
     LEFT = 1
@@ -230,6 +237,17 @@ BC_ALL = BoundsChange.ALL
 
 
 class Alignment(IntFlag):
+    """Alignment enumeration.
+
+    Used to position an object's bounds relative to other.
+    NONE: No aligment;
+    LEFT: Aligns this with other's left coordinate.
+    RIGHT: Aligns this with other's right coordinate.
+    CENTER: Centralizes horizontally this with other's.
+    TOP: Aligns this with other's top coordinate.
+    BOTTOM: Aligns this with other's bottom coordinate.
+    MIDDLE: Centralizes vertically this with other's.
+    """
     NONE = 0
     LEFT = 1
     RIGHT = 2
@@ -249,6 +267,13 @@ AL_MIDDLE = Alignment.MIDDLE
 
 
 class ButtonPressedState(Enum):
+    """ButtonPressedState enumeration.
+
+    Used to specify the state ob a button.
+    NORMAL: The button is not pressed and the mouse is not hovering it;
+    HILIGHTED: The button is not pressed but the mouse is hovering it;
+    PRESSED: The button is pressed.
+    """
     NORMAL = 1
     HILIGHTED = 2
     PRESSED = 3
@@ -260,6 +285,14 @@ BPS_PRESSED = ButtonPressedState.PRESSED
 
 
 class ButtonToggleState(Enum):
+    """ButtonToggleState enumeration.
+
+    For controls that behaves as ON/OFF switches (such as ToggleButtons), this
+    enumeration is used to specify the toggle state.
+    ON: The control is on, or checked;
+    OFF: The control is off, or unchecked;
+    UNDEFINED: The initial state of the control is yet to be defined or depend on other conditions.
+    """
     OFF = 0
     ON = 1
     UNDEFINED = 2
@@ -270,6 +303,14 @@ BTS_UNDEFINED = ButtonToggleState.UNDEFINED
 
 
 class CheckBoxState(Enum):
+    """CheckBoxState enumeration.
+
+    Similar to ButtonToggleState, this enumeration is used to specifiy the state of
+    a CheckBox.
+    UNCHECKED: The option this control represents is not checked.
+    CHECKED: The option this control represents is checked.
+    UNDEFINED: The option this control represents is in undefined state.
+    """
     UNCHECKED = 0
     CHECKED = 1
     UNDFINED = 2
