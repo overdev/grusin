@@ -117,17 +117,21 @@ class LayoutNext(Enum):
             current control;
     NEWLINE: places the next control at the LEFT of the parent's client area. A row of
              controls has the height of the control with the larger height.
+    CASCADE: places the next control 32 pixels to the right and bottom of previous
+             control's top-left corner.
     MANUAL: does nothing, as this means the control will be placed in a specific position.
     """
     SAMELINE = 0
     BELOW = 1
     NEWLINE = 2
-    MANUAL = 3
+    CASCADE = 3
+    MANUAL = 4
 
 
 LON_SAMELINE = LayoutNext.SAMELINE
 LON_BELOW = LayoutNext.BELOW
 LON_NEWLINE = LayoutNext.NEWLINE
+LON_CASCADE = LayoutNext.CASCADE
 LON_MANUAL = LayoutNext.MANUAL
 
 
@@ -1559,7 +1563,6 @@ class UIRuntime(metaclass=SingletonMeta):
                 if bottom < child.bounds.bottom + child.margin.bottom:
                     bottom = child.bounds.bottom + child.margin.bottom
             else:
-                print(previous, previous.bounds.right, previous.bounds.bottom)
                 if layout is LON_SAMELINE:
                     child.bounds.left = previous.bounds.right + previous.margin.right + child.margin.left
                     child.bounds.top = top + child.margin.top
@@ -1577,12 +1580,16 @@ class UIRuntime(metaclass=SingletonMeta):
                     child.bounds.top = bottom + child.margin.top
                     bottom = child.bounds.bottom + child.margin.bottom
 
+                elif layout is LON_CASCADE:
+                    child.bounds.left = previous.bounds.left + 32
+                    child.bounds.top = previous.bounds.top + 32
+                    if bottom < child.bounds.bottom + child.margin.bottom:
+                        bottom = child.bounds.bottom + child.margin.bottom
+
                 elif layout is LON_MANUAL:
                     pass        # do nothing...
 
-            # child.process_message(Message.LAYOUT_POS, left, top)
             previous = child
-
 
     def set_parent(self, child: 'Control') -> bool:
         if self.context:
@@ -2595,9 +2602,14 @@ class ContainerControl(Control):
                             bottom = child.bounds.bottom + child.margin.bottom
 
                     elif layout is LON_BELOW:
-                        print(child)
                         child.bounds.left = previous.bounds.left - previous.margin.left + child.margin.left
                         child.bounds.top = previous.bounds.bottom + previous.margin.bottom + child.margin.top
+                        if bottom < child.bounds.bottom + child.margin.bottom:
+                            bottom = child.bounds.bottom + child.margin.bottom
+
+                    elif layout is LON_CASCADE:
+                        child.bounds.left = previous.bounds.left + 32
+                        child.bounds.top = previous.bounds.top + 32
                         if bottom < child.bounds.bottom + child.margin.bottom:
                             bottom = child.bounds.bottom + child.margin.bottom
 
@@ -2905,24 +2917,24 @@ if __name__ == '__main__':
                 # this.location = Point(10, 20)
                 # this.size = Size(110, 20)
 
-                @PushButton.MouseEnterEvent.handler
+                @PushButton.PressedEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
-                    pass
+                    sys.exit()
 
             with PushButton(layout=LON_BELOW):
                 # this.location = Point(10, 20)
                 # this.size = Size(110, 20)
 
-                @PushButton.MouseEnterEvent.handler
-                def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
-                    pass
+                @PushButton.PressedEvent.handler
+                def mouse_leave_again(sender: PushButton, evargs: EventArgs) -> None:
+                    sender.parent.pushbutton1.enabled = False
 
             with CheckBox(layout=LON_SAMELINE):
                 # this.location = Point(10, 130)
                 this.text = "This is a checkbox control"
 
-                @CheckBox.CheckedEvent.handler
+                @CheckBox.CheckChangedEvent.handler
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
                     # sender.text = repr(pg.time.get_ticks())
-                    pass
+                    sender.parent.pushbutton2.enabled = sender.checked
 
