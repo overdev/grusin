@@ -196,7 +196,7 @@ DEFAULT_SKIN = {
         'layout': {
             'size': (120, 120),
             'padding': (2, 2, 2, 2),
-            'margin': (0, 0, 0, 0),
+            'margin': (2, 2, 2, 2),
             'fit': True,
         },
         'normal': {

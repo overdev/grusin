@@ -69,16 +69,17 @@ class Message(IntEnum):
     ADD_CHILD = CONTROL_FIRST + 2
     REMOVE_CHILD = CONTROL_FIRST + 3
     REMOVE_CHILDREN = CONTROL_FIRST + 4
-    CHILD_INDEX = CONTROL_FIRST + 5
-    SELECT = CONTROL_FIRST + 6
-    SELECTED = CONTROL_FIRST + 7
-    FOCUSED = CONTROL_FIRST + 8
-    DEFOCUSED = CONTROL_FIRST + 9
-    CREATED = CONTROL_FIRST + 10
-    INITIALIZE = CONTROL_FIRST + 11
-    TEXTCHANGED = CONTROL_FIRST + 12
-    SIZECHANGED = CONTROL_FIRST + 13
-    CONTROL_LAST = CONTROL_FIRST + 13
+    LAYOUT_CHILDREN = CONTROL_FIRST + 5
+    CHILD_INDEX = CONTROL_FIRST + 6
+    SELECT = CONTROL_FIRST + 7
+    SELECTED = CONTROL_FIRST + 8
+    FOCUSED = CONTROL_FIRST + 9
+    DEFOCUSED = CONTROL_FIRST + 10
+    CREATED = CONTROL_FIRST + 11
+    INITIALIZE = CONTROL_FIRST + 12
+    TEXTCHANGED = CONTROL_FIRST + 13
+    SIZECHANGED = CONTROL_FIRST + 14
+    CONTROL_LAST = CONTROL_FIRST + 14
 
     # App related
     APP_FIRST = 0xA0
@@ -365,24 +366,6 @@ CBS_CHECKED = CheckBoxState.CHECKED
 CBS_UNDFINED = CheckBoxState.UNDFINED
 
 
-def sameline():
-    """Sepcifiy the next control's position to be at the left of the last placed control.
-    """
-    UIRuntime().get_cursor().next = LON_SAMELINE
-
-
-def below():
-    """Sepcifiy the next control's position to be below the last placed control.
-    """
-    UIRuntime().get_cursor().next = LON_BELOW
-
-
-def newline():
-    """Sepcifiy the next control's position to be below the last row of placed controls.
-    """
-    UIRuntime().get_cursor().next = LON_NEWLINE
-
-
 class SingletonMeta(type):
     """
     Define an Instance operation that lets clients access its unique
@@ -402,19 +385,34 @@ class SingletonMeta(type):
 #crsr
 class LayoutCursor:
 
-    __slots__ = 'left', 'top', 'row_bottom', 'next', 'ref'
+    __slots__ = '_controls', '_layout'
 
-    def __init__(self, left: int, top: int) -> None:
-        self.left: int = left
-        self.top: int = top
-        self.row_bottom: int = 0
-        self.next: LayoutNext = LON_SAMELINE
-        self.ref: 'Control' = None
+    def __init__(self) -> None:
+        self._controls: List[Control] = []
+        self._layout: List[LayoutNext] = []
+        # remove these
+        # self.left: int = left
+        # self.top: int = top
+        # self.row_bottom: int = 0
+        # self.next: LayoutNext = LON_SAMELINE
+        # self.ref: 'Control' = None
+
+    def __nonzero__(self) -> bool:
+        return True
 
     def __str__(self) -> str:
-        return "(left:{}, top:{}, bottom:{}, ref:{}, next:{})".format(
-            self.left, self.top, self.row_bottom, self.ref, self.next
-        )
+        return "LAYOUT[{}]".format(len(self))
+
+    def __call__(self, control: 'Control', layout: 'LayoutNext') -> None:
+        self._controls.append(control)
+        self._layout.append(layout)
+
+    def __len__(self) -> int:
+        return len(self._controls)
+
+    def __iter__(self):
+        return [(self._controls[i], self._layout[i]) for i in range(len(self))].__iter__()
+
 
 # rndr
 class RendererBase:
@@ -489,6 +487,10 @@ class RendererBase:
     @property
     def erase_color(self) -> 'Color':
         return Color(*self._skin.metrics.default.erase_color)
+
+    @property
+    def default(self) -> 'Namespace':
+        return self._skin.metrics.default
 
     @erase_color.setter
     def erase_color(self, value: Union['Color', Tuple[int, int, int]]) -> None:
@@ -1429,11 +1431,12 @@ class Application(metaclass=SingletonMeta):
         self._display.fill(WHITE)
         self._renderer.clear(WHITE)
         self._renderer.flip()
+        runtime: UIRuntime = UIRuntime()
 
         this = None
         yield
+        runtime.layout_topmost()
         del this
-        runtime = UIRuntime()
         self._running = True
         main_form = kwargs.get('main_form')
         if isinstance(main_form, str):
@@ -1459,7 +1462,7 @@ class UIRuntime(metaclass=SingletonMeta):
         self._to_activate: 'Control' = None
         self._instance_counter: Dict[Type, int] = {}
         self._font: pg.font.SysFont = pg.font.SysFont("Arial", 32)
-        self._cursor_stack: List[LayoutCursor] = [LayoutCursor(0, 0)]
+        self._cursor_stack: List[LayoutCursor] = [LayoutCursor()]
 
         # mouse input
         self._mbuttons: bytearray = bytearray(4)
@@ -1528,15 +1531,58 @@ class UIRuntime(metaclass=SingletonMeta):
     def enter_context(self, control: 'Control') -> None:
         global this
         self._init_stack.append(control)
-        self._cursor_stack.append(LayoutCursor(control.padding.left, control.padding.top))
+        self._cursor_stack.append(LayoutCursor())
         this = control
 
     def exit_context(self) -> None:
         global this
+        if this:
+            self.context.process_message(Message.LAYOUT_CHILDREN, self.get_cursor())
         self._init_stack.pop()
         self._cursor_stack.pop()
         if self._init_stack:
             this = self._init_stack[-1]
+
+    def layout_topmost(self) -> None:
+        cursor: Optional[LayoutCursor] = self.get_cursor()
+        renderer: RendererBase = Application().get_renderer()
+        left: int = renderer.default.padding[0]     # left
+        top: int = renderer.default.padding[1]      # top
+        bottom: int = top
+        previous: Control = None
+        for child, layout in cursor:
+            if child not in self._controls:
+                continue
+
+            if previous is None:
+                child.location = Point(left + child.margin.left, top + child.margin.top)
+                if bottom < child.bounds.bottom + child.margin.bottom:
+                    bottom = child.bounds.bottom + child.margin.bottom
+            else:
+                print(previous, previous.bounds.right, previous.bounds.bottom)
+                if layout is LON_SAMELINE:
+                    child.bounds.left = previous.bounds.right + previous.margin.right + child.margin.left
+                    child.bounds.top = top + child.margin.top
+                    if bottom < child.bounds.bottom + child.margin.bottom:
+                        bottom = child.bounds.bottom + child.margin.bottom
+
+                elif layout is LON_BELOW:
+                    child.bounds.left = previous.bounds.left - previous.margin.left + child.margin.left
+                    child.bounds.top = previous.bounds.bottom + previous.margin.bottom + child.margin.top
+                    if bottom < child.bounds.bottom + child.margin.bottom:
+                        bottom = child.bounds.bottom + child.margin.bottom
+
+                elif layout is LON_NEWLINE:
+                    child.bounds.left = left + child.margin.left
+                    child.bounds.top = bottom + child.margin.top
+                    bottom = child.bounds.bottom + child.margin.bottom
+
+                elif layout is LON_MANUAL:
+                    pass        # do nothing...
+
+            # child.process_message(Message.LAYOUT_POS, left, top)
+            previous = child
+
 
     def set_parent(self, child: 'Control') -> bool:
         if self.context:
@@ -1554,7 +1600,6 @@ class UIRuntime(metaclass=SingletonMeta):
         return control in self._controls
 
     def bring_to_front(self, control: 'Control') -> None:
-        # print(control, "bring_to_front")
         self._controls.remove(control)
         self._controls.append(control)
 
@@ -1706,7 +1751,6 @@ class UIRuntime(metaclass=SingletonMeta):
 
                     if self._hovered:
                         topmost: Control = self._hovered.get_topmost()
-                        print("topmost ->", topmost, 'hovered ->', self._hovered.parent)
                         if self._active:
                             if self._active is not topmost:
                                 modal: bool = self._active.behavior & BE_MODAL == BE_MODAL
@@ -1834,21 +1878,27 @@ class Control:
 
     _behavior: Behavior = BE_SELECTABLE
 
-    def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT):
+    def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT, **kwargs):
         rt = UIRuntime()
+        renderer: RendererBase = Application().get_renderer()
+        element: Namespace = renderer.get_element(self)
+        cursor: LayoutCursor = rt.get_cursor()
+        if isinstance(cursor, LayoutCursor):
+            cursor(self, kwargs.get('layout', LON_NEWLINE))
+
         self._parent: 'Control' = None
         self._name: str = rt.gen_name(self) if name is DEFAULT else name
+
         # text
         self._tooltip: str = ""
 
         # spacing
-        self._margin: Spacing = Spacing.all(1)
-        self._padding: Spacing = Spacing.all(2)
+        self._margin: Spacing = Spacing(*element.layout.margin)
+        self._padding: Spacing = Spacing(*element.layout.padding)
         self._render_margin: Spacing = Spacing.all(0)
 
         # bounds
-        renderer: RendererBase = Application().get_renderer()
-        w, h = renderer.get_element(self).size
+        w, h = element.layout.size
 
         self._client_bounds: Rectangle = Rectangle(0, 0, w, h)
         self._client_alignment: Alignment = AL_CENTER | AL_MIDDLE
@@ -1862,16 +1912,14 @@ class Control:
 
         if parent is DEFAULT:
             if rt.context:
-                # print("Context for {} is {}".format(self, rt.context))
                 self.parent = rt.context
             else:
                 self.parent = None
                 rt.add_control(self)
         else:
             self.parent = parent
-        # print(self, "parent is", self._parent)
         self._get_events()
-        self._auto_layout()
+        # self._auto_layout()       # remove this later
 
     def __str__(self) -> str:
         return "[{name}:{cls} - {bounds} {visible} {enabled} {index}]".format(
@@ -2023,31 +2071,31 @@ class Control:
             return self._validating
         return False
 
-    def _auto_layout(self) -> None:
-        cursor: LayoutCursor = UIRuntime().get_cursor()
-        if cursor:
-            lnx: LayoutNext = cursor.next
-            if cursor.ref:
-                if lnx is LON_SAMELINE:
-                    self._bounds.location = Point(
-                        cursor.ref.bounds.left + self.margin.left, cursor.ref.bounds.top + self.margin.top)
-                    if cursor.row_bottom < self.bounds.bottom + self.margin.bottom:
-                        cursor.row_bottom = self.bounds.bottom + self.margin.bottom
-                elif lnx is LON_BELOW:
-                    self._bounds.location = Point(
-                        cursor.ref.bounds.left + self.margin.left, cursor.ref.bounds.bottom + self.margin.top)
-                    if cursor.row_bottom < self.bounds.bottom + self.margin.bottom:
-                        cursor.row_bottom = self.bounds.bottom + self.margin.bottom
-                elif lnx is LON_NEWLINE:
-                    self._bounds.location = Point(
-                        self.margin.left, cursor.row_bottom + self.margin.top)
-                    cursor.row_bottom = self.bounds.bottom + self.margin.bottom
-            else:
-                self._bounds.location = self.margin.top_left
-                cursor.row_bottom = self.bounds.bottom + self.margin.bottom
-            cursor.ref = self
-        else:
-            print("NO CURSOR!")
+    # remove this later
+    # def _auto_layout(self) -> None:
+    #     cursor: LayoutCursor = UIRuntime().get_cursor()
+    #     if cursor:
+    #         lnx: LayoutNext = cursor.next
+    #         if cursor.ref:
+    #             if lnx is LON_SAMELINE:
+    #                 self._bounds.location = Point(
+    #                     cursor.ref.bounds.left + self.margin.left, cursor.ref.bounds.top + self.margin.top)
+    #                 if cursor.row_bottom < self.bounds.bottom + self.margin.bottom:
+    #                     cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+    #             elif lnx is LON_BELOW:
+    #                 self._bounds.location = Point(
+    #                     cursor.ref.bounds.left + self.margin.left, cursor.ref.bounds.bottom + self.margin.top)
+    #                 if cursor.row_bottom < self.bounds.bottom + self.margin.bottom:
+    #                     cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+    #             elif lnx is LON_NEWLINE:
+    #                 self._bounds.location = Point(
+    #                     self.margin.left, cursor.row_bottom + self.margin.top)
+    #                 cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+    #         else:
+    #             self._bounds.location = self.margin.top_left
+    #             cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+    #         cursor.ref = self
+    #     else:
 
     def _get_events(self):
         for name in self.__class__.__dict__:
@@ -2255,8 +2303,8 @@ class ButtonBase(Control):
 
     _behavior = BE_SELECTABLE
 
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
-        super(ButtonBase, self).__init__(parent, name)
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super(ButtonBase, self).__init__(parent, name, **kwargs)
 
         self._pressed_state: ButtonPressedState = BPS_NORMAL
         self._toggle_state: ButtonToggleState = BTS_OFF
@@ -2310,8 +2358,8 @@ class PushButton(ButtonBase):
     class PressedEvent(EventBase):
         pass
 
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
-        super(PushButton, self).__init__(parent, name)
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super(PushButton, self).__init__(parent, name, **kwargs)
         renderer: RendererBase = Application().get_renderer()
         self._padding = Spacing(*renderer.get_element(self).layout.padding)
         size: Size = renderer.measure_text(self, self.text)
@@ -2345,8 +2393,8 @@ class CheckBox(ButtonBase):
 
     _behavior = Control._behavior | BE_FIXED_HEIGHT
 
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
-        super().__init__(parent, name)
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super().__init__(parent, name, **kwargs)
 
         self.checked = True
 
@@ -2436,7 +2484,7 @@ class CheckBox(ButtonBase):
 class ScrollableControl(Control):
     # has display_bounds, scroll_position, scrollbars (non-clients)
     # not necessarily a container
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
         # client/display bounds and scrolling
         self._display_bounds: Rectangle = Rectangle(0, 0, 32, 32)
         
@@ -2445,7 +2493,7 @@ class ScrollableControl(Control):
         self._vscrollbar: 'VScrollbar' = None
         self._hscrollbar: 'HScrollbar' = None
 
-        super(ScrollableControl, self).__init__(parent, name)
+        super(ScrollableControl, self).__init__(parent, name, **kwargs)
 
 
 class ContainerControl(Control):
@@ -2453,11 +2501,11 @@ class ContainerControl(Control):
 
     _behavior: Behavior = BE_SELECTABLE
 
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
         # client controls (children)
         self._children: List[Control] = []
         self._selected: int = -1    # index of the child with
-        super().__init__(parent, name)
+        super().__init__(parent, name, **kwargs)
 
     def __getattr__(self, name: str) -> 'Control':
         child = self.find_by_name(name)
@@ -2524,6 +2572,45 @@ class ContainerControl(Control):
             self._children.clear()
             self._selected = -1
             # self.invalidate()
+
+        elif message is Message.LAYOUT_CHILDREN:
+            cursor: Optional[LayoutCursor] = params[0]
+            left: int = self.padding.left
+            top: int = self.padding.top
+            bottom: int = self.padding.top
+            previous: Control = None
+            for child, layout in cursor:
+                if child not in self._children:
+                    continue
+
+                if not previous:
+                    child.location = Point(left + child.margin.left, top + child.margin.top)
+                    if bottom < child.bounds.bottom + child.margin.bottom:
+                        bottom = child.bounds.bottom + child.margin.bottom
+                else:
+                    if layout is LON_SAMELINE:
+                        child.bounds.left = previous.bounds.right + previous.margin.right + child.margin.left
+                        child.bounds.top = top + child.margin.top
+                        if bottom < child.bounds.bottom + child.margin.bottom:
+                            bottom = child.bounds.bottom + child.margin.bottom
+
+                    elif layout is LON_BELOW:
+                        print(child)
+                        child.bounds.left = previous.bounds.left - previous.margin.left + child.margin.left
+                        child.bounds.top = previous.bounds.bottom + previous.margin.bottom + child.margin.top
+                        if bottom < child.bounds.bottom + child.margin.bottom:
+                            bottom = child.bounds.bottom + child.margin.bottom
+
+                    elif layout is LON_NEWLINE:
+                        child.bounds.left = left + child.margin.left
+                        child.bounds.top = bottom + child.margin.top
+                        bottom = child.bounds.bottom + child.margin.bottom
+
+                    elif layout is LON_MANUAL:
+                        pass        # do nothing...
+
+                # child.process_message(Message.LAYOUT_POS, left, top)
+                previous = child
 
         elif message is Message.SELECT:
             child: 'Control' = params[0]
@@ -2656,7 +2743,7 @@ class ButtonGroup(Control):
 
     class ButtonGroupItem:
 
-        def __init__(self, owner: 'ButtonGroup', name: str=DEFAULT) -> None:
+        def __init__(self, owner: 'ButtonGroup', name: str=DEFAULT, **kwargs) -> None:
             self._kind: ButtonGroupKind = BK_PUSHBUTTON
             self._enabled: bool = True
             self._pressed_state: ButtonPressedState = BPS_NORMAL
@@ -2714,8 +2801,8 @@ class ButtonGroup(Control):
         def display(self, value: ButtonGroupDisplay) -> None:
             self._display = value
 
-    def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT) -> None:
-        super(ButtonGroup, self).__init__(parent, name)
+    def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super(ButtonGroup, self).__init__(parent, name, **kwargs)
         self._items: List[ButtonGroup.ButtonGroupItem] = []
         self._index: int = -1
         self._item_counter: int = 0
@@ -2757,8 +2844,8 @@ class Panel(ContainerControl, ScrollableControl):
 
     _behavior: Behavior = ContainerControl._behavior
 
-    # def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT) -> None:
-    #     super().__init__(parent, name)
+    # def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+    #     super().__init__(parent, name, **kwargs)
 
     def get_state(self) -> str:
         return 'normal' if not self.enabled else 'disabled'
@@ -2779,48 +2866,39 @@ if __name__ == '__main__':
 
             @Panel.MouseEnterEvent.handler
             def mouse_enter(sender: Panel, evargs: EventArgs) -> None:
-                # print(sender, "entered")
                 pass
 
             @Panel.MouseLeaveEvent.handler
             def mouse_leave(sender: Panel, evargs: EventArgs) -> None:
-                # print(sender, "exited")
                 pass
 
-            with CheckBox():
+            with CheckBox(layout=LON_BELOW):
                 # this.location = Point(10, 130)
                 this.text = "A checkbox control."
 
                 @CheckBox.CheckedEvent.handler
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
-                    # print(sender, "Checked")
                     pass
 
-            sameline()
             with PushButton():
                 # this.location = Point(10, 20)
                 # this.size = Size(110, 20)
-                print("REFERENCE", UIRuntime().get_cursor().ref)
 
                 @PushButton.MouseEnterEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
-                    # print(sender, "Entered")
                     pass
 
-        sameline()
-        with Panel():
+        with Panel(layout=LON_BELOW):
             # this.location = Point(250, 150)
-            # this.size = Point(500, 300)
+            this.size = Point(500, 300)
             # this.enabled = False
 
             @Panel.MouseEnterEvent.handler
             def mouse_enter(sender: Panel, evargs: EventArgs) -> None:
-                # print(sender, "entered")
                 pass
 
             @Panel.MouseLeaveEvent.handler
             def mouse_leave(sender: Panel, evargs: EventArgs) -> None:
-                # print(sender, "exited")
                 pass
 
             with PushButton():
@@ -2829,17 +2907,22 @@ if __name__ == '__main__':
 
                 @PushButton.MouseEnterEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
-                    # print("Entered", sender)
                     pass
 
-            below()
-            with CheckBox():
+            with PushButton(layout=LON_BELOW):
+                # this.location = Point(10, 20)
+                # this.size = Size(110, 20)
+
+                @PushButton.MouseEnterEvent.handler
+                def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
+                    pass
+
+            with CheckBox(layout=LON_SAMELINE):
                 # this.location = Point(10, 130)
                 this.text = "This is a checkbox control"
 
                 @CheckBox.CheckedEvent.handler
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
                     # sender.text = repr(pg.time.get_ticks())
-                    # print("Checked", sender)
                     pass
 
