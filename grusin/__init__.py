@@ -4,7 +4,7 @@ import sys
 import pygame as pg
 from collections import OrderedDict
 from contextlib import contextmanager
-from typing import Any, Tuple, Optional, Union, List, Callable, Dict
+from typing import Any, Tuple, Optional, Union, List, Callable, Dict, Type
 from enum import IntFlag, Enum, IntEnum
 from skin import DEFAULT_SKIN
 
@@ -402,15 +402,19 @@ class SingletonMeta(type):
 #crsr
 class LayoutCursor:
 
-    __slots__ = 'left', 'top', 'line_height', 'next', 'ref'
+    __slots__ = 'left', 'top', 'row_bottom', 'next', 'ref'
 
     def __init__(self, left: int, top: int) -> None:
         self.left: int = left
         self.top: int = top
-        self.line_height: int = 0
+        self.row_bottom: int = 0
         self.next: LayoutNext = LON_SAMELINE
         self.ref: 'Control' = None
 
+    def __str__(self) -> str:
+        return "(left:{}, top:{}, bottom:{}, ref:{}, next:{})".format(
+            self.left, self.top, self.row_bottom, self.ref, self.next
+        )
 
 # rndr
 class RendererBase:
@@ -1550,7 +1554,7 @@ class UIRuntime(metaclass=SingletonMeta):
         return control in self._controls
 
     def bring_to_front(self, control: 'Control') -> None:
-        print(control, "bring_to_front")
+        # print(control, "bring_to_front")
         self._controls.remove(control)
         self._controls.append(control)
 
@@ -1832,9 +1836,6 @@ class Control:
 
     def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT):
         rt = UIRuntime()
-        cursor: LayoutCursor = rt.get_cursor()
-        if cursor:
-            cursor.ref = self
         self._parent: 'Control' = None
         self._name: str = rt.gen_name(self) if name is DEFAULT else name
         # text
@@ -1846,9 +1847,12 @@ class Control:
         self._render_margin: Spacing = Spacing.all(0)
 
         # bounds
-        self._client_bounds: Rectangle = Rectangle(0, 0, 32, 32)
+        renderer: RendererBase = Application().get_renderer()
+        w, h = renderer.get_element(self).size
+
+        self._client_bounds: Rectangle = Rectangle(0, 0, w, h)
         self._client_alignment: Alignment = AL_CENTER | AL_MIDDLE
-        self._bounds: Rectangle = Rectangle(0, 0, 70, 70)
+        self._bounds: Rectangle = Rectangle(0, 0, w, h)
 
         # state
         self._visible: bool = True
@@ -1858,15 +1862,16 @@ class Control:
 
         if parent is DEFAULT:
             if rt.context:
-                print("Context for {} is {}".format(self, rt.context))
+                # print("Context for {} is {}".format(self, rt.context))
                 self.parent = rt.context
             else:
                 self.parent = None
                 rt.add_control(self)
         else:
             self.parent = parent
-        print(self, "parent is", self._parent)
+        # print(self, "parent is", self._parent)
         self._get_events()
+        self._auto_layout()
 
     def __str__(self) -> str:
         return "[{name}:{cls} - {bounds} {visible} {enabled} {index}]".format(
@@ -1883,36 +1888,6 @@ class Control:
 
     def __exit__(self, exc_type, exc_value, traceback):
         UIRuntime().exit_context()
-        # layout cursor
-        # This is the right place to calculate the automatic placement
-        # for the control, in relation to the __init__ method, because
-        # here the control's contents is most likely to be defined.
-        cursor: LayoutCursor = UIRuntime().get_cursor()
-        pos: Point = Point(self.margin.left, self.margin.top)
-        auto_place_it: bool = True
-        if cursor:
-            ref: Control = cursor.ref
-            print("REF:", ref)
-            if cursor.next is LON_SAMELINE:
-                pos = Point(cursor.left + self.margin.left, cursor.top + self.margin.top)
-            
-            elif cursor.next is LON_NEWLINE:
-                pos = Point(self.margin.left, cursor.top + cursor.line_height + self.margin.top)
-                cursor.top += cursor.line_height
-            
-            elif cursor.next is LON_BELOW:
-                if ref:
-                    pos = Point(ref.bounds.left + self.margin.left, ref.bounds.bottom + ref.margin.bottom + self.margin.top)
-                else:
-                    pos = Point(self.margin.left, cursor.top + cursor.line_height + self.margin.top)
-            
-            elif cursor.next is LON_MANUAL:
-                auto_place_it = False
-        
-            cursor.ref = self
-
-        if auto_place_it:
-            self._bounds.location = pos
 
     @property
     def name(self) -> str:
@@ -2044,9 +2019,35 @@ class Control:
     def is_validating(self) -> bool:
         if self._parent:
             return self._parent.is_validating or self._validating
-        elif self._is_topmost:
+        elif self.is_topmost:
             return self._validating
         return False
+
+    def _auto_layout(self) -> None:
+        cursor: LayoutCursor = UIRuntime().get_cursor()
+        if cursor:
+            lnx: LayoutNext = cursor.next
+            if cursor.ref:
+                if lnx is LON_SAMELINE:
+                    self._bounds.location = Point(
+                        cursor.ref.bounds.left + self.margin.left, cursor.ref.bounds.top + self.margin.top)
+                    if cursor.row_bottom < self.bounds.bottom + self.margin.bottom:
+                        cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+                elif lnx is LON_BELOW:
+                    self._bounds.location = Point(
+                        cursor.ref.bounds.left + self.margin.left, cursor.ref.bounds.bottom + self.margin.top)
+                    if cursor.row_bottom < self.bounds.bottom + self.margin.bottom:
+                        cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+                elif lnx is LON_NEWLINE:
+                    self._bounds.location = Point(
+                        self.margin.left, cursor.row_bottom + self.margin.top)
+                    cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+            else:
+                self._bounds.location = self.margin.top_left
+                cursor.row_bottom = self.bounds.bottom + self.margin.bottom
+            cursor.ref = self
+        else:
+            print("NO CURSOR!")
 
     def _get_events(self):
         for name in self.__class__.__dict__:
@@ -2402,7 +2403,6 @@ class CheckBox(ButtonBase):
                 is_hovering: bool = params[0]
                 if is_hovering:
                     self._pressed_state = BPS_HILIGHTED
-                    # self._on_pressed(self, None)
                     if self._toggle_state is BTS_ON:
                         self._toggle_state = BTS_OFF
                         self._on_unchecked(self, None)
@@ -2432,10 +2432,6 @@ class CheckBox(ButtonBase):
         else:
             return super().process_message(message, *params)
 
-
-class ToolButton(ButtonBase):
-
-    pass
 
 class ScrollableControl(Control):
     # has display_bounds, scroll_position, scrollbars (non-clients)
@@ -2650,6 +2646,7 @@ class ContainerControl(Control):
             return super().process_message(message, *params)
 
 
+#btngrp
 class ButtonGroup(Control):
 
     _behavior: Behavior = Control._behavior | BE_FIXED_SIZE
@@ -2723,6 +2720,15 @@ class ButtonGroup(Control):
         self._index: int = -1
         self._item_counter: int = 0
 
+    @property
+    def enabled(self) -> bool:
+        if super(ButtonGroup, self).enabled:
+            return len(self._items) > 0
+
+    @enabled.setter
+    def enabled(self, value):
+        super(ButtonGroup, self).enabled = value
+
     def get_item_default_name(self, item: 'ButtonGroup.ButtonGroupItem') -> str:
         name: str = {
             BK_PUSHBUTTON: 'pushbuttonitem{}',
@@ -2773,11 +2779,13 @@ if __name__ == '__main__':
 
             @Panel.MouseEnterEvent.handler
             def mouse_enter(sender: Panel, evargs: EventArgs) -> None:
-                print(sender, "entered")
+                # print(sender, "entered")
+                pass
 
             @Panel.MouseLeaveEvent.handler
             def mouse_leave(sender: Panel, evargs: EventArgs) -> None:
-                print(sender, "exited")
+                # print(sender, "exited")
+                pass
 
             with CheckBox():
                 # this.location = Point(10, 130)
@@ -2785,17 +2793,21 @@ if __name__ == '__main__':
 
                 @CheckBox.CheckedEvent.handler
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
-                    print(sender, "Checked")
+                    # print(sender, "Checked")
+                    pass
 
             sameline()
             with PushButton():
                 # this.location = Point(10, 20)
                 # this.size = Size(110, 20)
+                print("REFERENCE", UIRuntime().get_cursor().ref)
 
                 @PushButton.MouseEnterEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
-                    print(sender, "Entered")
+                    # print(sender, "Entered")
+                    pass
 
+        sameline()
         with Panel():
             # this.location = Point(250, 150)
             # this.size = Point(500, 300)
@@ -2803,11 +2815,13 @@ if __name__ == '__main__':
 
             @Panel.MouseEnterEvent.handler
             def mouse_enter(sender: Panel, evargs: EventArgs) -> None:
-                print(sender, "entered")
+                # print(sender, "entered")
+                pass
 
             @Panel.MouseLeaveEvent.handler
             def mouse_leave(sender: Panel, evargs: EventArgs) -> None:
-                print(sender, "exited")
+                # print(sender, "exited")
+                pass
 
             with PushButton():
                 # this.location = Point(10, 20)
@@ -2815,7 +2829,8 @@ if __name__ == '__main__':
 
                 @PushButton.MouseEnterEvent.handler
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
-                    print("Entered", sender)
+                    # print("Entered", sender)
+                    pass
 
             below()
             with CheckBox():
@@ -2824,6 +2839,7 @@ if __name__ == '__main__':
 
                 @CheckBox.CheckedEvent.handler
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
-                    sender.text = repr(pg.time.get_ticks())
-                    print("Checked", sender)
+                    # sender.text = repr(pg.time.get_ticks())
+                    # print("Checked", sender)
+                    pass
 

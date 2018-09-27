@@ -179,6 +179,7 @@ DEFAULT_SKIN = {
         },
     },
     'Panel': {
+        'size': (240, 180),
         'method': 'render_panel',
         'image_index': 0,
         'image_border': (2, 2, 2, 2),
