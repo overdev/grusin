@@ -108,6 +108,57 @@ DEFAULT_SKIN = {
             'image_kind': 'IMK_NINEPATCH'
         },
     },
+    'ButtonGroup': {
+        'size': (60, 20),
+        'icon_size': (16, 16),
+        'method': 'render_buttongroup',
+        'image_index': 0,
+        'image_border': (2, 2, 2, 2),
+        'erase_background': True,
+        'render_layers': ('BACKGROUND', 'ABOVE_BACKGROUND', 'FOREGROUND'),
+        'style': {
+            'size': 'medium',
+            'valign': 'MIDDLE',
+            'halign': 'CENTER',
+            'bold': False,
+            'italic': False,
+            'underline': False,
+        },
+        'layout': {
+            'size': (60, 20),
+            'padding': (2, 2, 2, 2),
+            'margin': (2, 2, 2, 2),
+            'fit': True,
+        },
+        'normal': {
+            'color': (32, 32, 32),
+            'backcolor': (232, 232, 232),
+            'bordercolor': (32, 32, 32),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+        'hilighted': {
+            'color': (64, 64, 64),
+            'backcolor': (255, 255, 255),
+            'bordercolor': (0, 0, 0),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+        'pressed': {
+            'color': (32, 32, 32),
+            'backcolor': (192, 192, 192),
+            'bordercolor': (0, 0, 0),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+        'disabled': {
+            'color': (128, 128, 128),
+            'backcolor': (160, 160, 160),
+            'bordercolor': (128, 128, 128),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+    },
     'CheckBox': {
         'size': (60, 20),
         'method': 'render_checkbox',
@@ -157,6 +208,76 @@ DEFAULT_SKIN = {
             'color': (0, 0, 0),
             'checkmark': {
                 'color': (0, 64, 0),
+                'image_area': (0, 0, 1, 1),
+                'image_kind': 'IMK_IMAGE'
+            },
+            'backcolor': (255, 255, 255),
+            'bordercolor': (32, 32, 32),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+        'disabled': {
+            'color': (128, 128, 128),
+            'checkmark': {
+                'color': (128, 128, 128),
+                'image_area': (0, 0, 1, 1),
+                'image_kind': 'IMK_IMAGE'
+            },
+            'backcolor': (160, 160, 160),
+            'bordercolor': (128, 128, 128),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+    },
+    'RadioButton': {
+        'size': (60, 20),
+        'method': 'render_radiobutton',
+        'image_index': 0,
+        'image_border': (2, 2, 2, 2),
+        'erase_background': True,
+        'render_layers': ('ABOVE_BACKGROUND',),
+        'style': {
+            'size': 'medium',
+            'valign': 'MIDDLE',
+            'halign': 'RIGHT',
+            'bold': False,
+            'italic': False,
+            'underline': False,
+        },
+        'layout': {
+            'size': (60, 20),
+            'padding': (2, 2, 10, 2),
+            'margin': (1, 1, 1, 1),
+            'fit': True,
+        },
+        'normal': {
+            'color': (32, 32, 32),
+            'checkmark': {
+                'color': (0, 0, 96),
+                'image_area': (0, 0, 1, 1),
+                'image_kind': 'IMK_IMAGE'
+            },
+            'backcolor': (255, 255, 255),
+            'bordercolor': (32, 32, 32),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+        'hilighted': {
+            'color': (32, 32, 32),
+            'checkmark': {
+                'color': (0, 0, 128),
+                'image_area': (0, 0, 1, 1),
+                'image_kind': 'IMK_IMAGE'
+            },
+            'backcolor': (255, 255, 255),
+            'bordercolor': (32, 32, 32),
+            'image_area': (0, 0, 1, 1),
+            'image_kind': 'IMK_NINEPATCH'
+        },
+        'pressed': {
+            'color': (0, 0, 0),
+            'checkmark': {
+                'color': (0, 0, 64),
                 'image_area': (0, 0, 1, 1),
                 'image_kind': 'IMK_IMAGE'
             },

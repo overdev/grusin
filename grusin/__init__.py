@@ -315,42 +315,6 @@ BTS_OFF = ButtonToggleState.OFF
 BTS_UNDEFINED = ButtonToggleState.UNDEFINED
 
 
-class ButtonGroupKind(Enum):
-    """ButtonKind enumeration.
-
-    Used to specify a ButtonGroup item's kind.
-    PUSHBUTTON: the ButtonGroup item behaves like a PushButton;
-    TOGGLEBUTTON: the ButtonGroup item behaves like a ToggleButton;
-    DROPDOWNBUTTON: the ButtonGroup item behaves like a DropDownButton;
-    """
-    PUSHBUTTON = 0
-    TOGGLEBUTTON = 1
-    DROPDOWNBUTTON = 3
-
-
-BK_PUSHBUTTON = ButtonGroupKind.PUSHBUTTON
-BK_TOGGLEBUTTON = ButtonGroupKind.TOGGLEBUTTON
-BK_DROPDOWNBUTTON = ButtonGroupKind.DROPDOWNBUTTON
-
-
-class ButtonGroupDisplay(Enum):
-    """ButtonDisplay enumeration.
-
-    Used to specify how the ButtonGroup item is rendered: text only, icon only or both.
-    BD_TEXT: displays only the button caption;
-    BD_ICON: displays only the button icon;
-    BD_BOTH: displays the button icon and text;
-    """
-    TEXT = 0
-    ICON = 1
-    BOTH = 2
-
-
-BGD_TEXT = ButtonGroupDisplay.TEXT
-BGD_ICON = ButtonGroupDisplay.ICON
-BGD_BOTH = ButtonGroupDisplay.BOTH
-
-
 class CheckBoxState(Enum):
     """CheckBoxState enumeration.
 
@@ -434,6 +398,8 @@ class RendererBase:
         self._render_methods: Dict[str, str] = {
             'PushButton': 'PushButton',
             'CheckBox': 'CheckBox',
+            'RadioButton': 'RadioButton',
+            'ButtonGroup': 'ButtonGroup',
             'Panel': 'Panel',
         }
         if isinstance(skin, (dict, OrderedDict)):
@@ -616,6 +582,39 @@ class RendererBase:
         if layer is RL_FOREGROUND:
             pg.draw.rect(surface, button.bordercolor, bounds, 1)
 
+    def render_buttongroup(self, control: 'ButtonGroup', element: 'Namespace', surface: pg.Surface,
+                          render_bounds: 'Rectangle', bounds: 'Rectangle', layer: RenderLayer) -> None:
+        state: str = control.get_state()
+        button: Namespace = element[state]
+        
+        if layer is RL_ABOVE_BACKGROUND or layer is RL_BELOW_FOREGROUND:
+            left: int = 0
+            for item in control.items:
+                if control.display is BGD_ICON or control.display is BGD_BOTH:
+                    # do not forget to render the actual icon image!
+                    icon_rect: Rectangle = Rectangle.join(bounds.location + control.padding.top_left, Size(*element.icon_size))
+
+                    pg.draw.rect(surface, RED, icon_rect)
+
+                if control.display is BGD_TEXT or control.display is BGD_BOTH:
+                    font: pg.font.Font = self.gui_font[element.style.size]
+                    alignment: Alignment = Alignment[element.style.valign] | Alignment[element.style.halign]
+                    font.set_bold(element.style.bold)
+                    font.set_italic(element.style.italic)
+                    font.set_underline(element.style.underline)
+                    width, height = font.size(control.text)
+                    text_rect: Rectangle = Rectangle.join(bounds.location + control.padding.top_left, width, height)
+                    if control.display is BGD_BOTH:
+                        text_rect.left += element.icon_size[0] + control.padding.left
+                    s: pg.Surface = font.render(item.text, True, button.color)
+
+                    surface.blit(s, text_rect.location)
+
+        if layer is RL_BACKGROUND:
+            pg.draw.rect(surface, button.backcolor, bounds, 0)
+        if layer is RL_FOREGROUND:
+            pg.draw.rect(surface, button.bordercolor, bounds, 1)
+
     def render_panel(self, control: 'Panel', element: 'Namespace', surface: pg.Surface,
                      render_bounds: 'Rectangle', bounds: 'Rectangle', layer: RenderLayer) -> None:
         state: str = control.get_state()
@@ -631,22 +630,15 @@ class RendererBase:
             state: str = control.get_state()
             checkbox: Namespace = element[state]
             font: pg.font.Font = self.gui_font[element.style.size]
-            alignment: Alignment = Alignment[element.style.valign] | Alignment[element.style.halign]
-            if element.style.halign == 'LEFT':
-                box_halign: Alignment = AL_RIGHT
-            else:
-                box_halign: Alignment = AL_LEFT
+
             font.set_bold(element.style.bold)
             font.set_italic(element.style.italic)
             font.set_underline(element.style.underline)
+
             width, height = font.size(control.text)
-            rect: Rectangle = Rectangle(bounds.left, bounds.top, width, height).reduce(control.padding).align_to(bounds, alignment)
-            rect.right -= control.padding.hor
             s: pg.Surface = font.render(control.text, True, checkbox.color)
-            box_rect: Rectangle = bounds.copy()
-            box_rect.size = height, height
-            box_rect.align_to(bounds, box_halign | AL_MIDDLE)
-            box_rect.left += control.padding.left
+            box_rect: Rectangle = Rectangle.join(bounds.location + control.padding.top_left, Size(height, height))
+            text_pos: Point = box_rect.location + Point(box_rect.width, 0) + control.padding.top_left
 
             pg.draw.rect(surface, checkbox.backcolor, box_rect, 0)
             pg.draw.rect(surface, checkbox.bordercolor, box_rect, 1)
@@ -654,7 +646,30 @@ class RendererBase:
                 pg.draw.rect(surface, checkbox.checkmark.color, box_rect.shrink(3), 0)
 
             # pg.draw.rect(surface, RED, bounds, 1)
-            surface.blit(s, rect.location)
+            surface.blit(s, text_pos)
+
+    def render_radiobutton(self, control: 'RadioButton', element: 'Namespace', surface: pg.Surface,
+                           render_bounds: 'Rectangle', bounds: 'Rectangle', layer: RenderLayer) -> None:
+            state: str = control.get_state()
+            radiobutton: Namespace = element[state]
+            font: pg.font.Font = self.gui_font[element.style.size]
+
+            font.set_bold(element.style.bold)
+            font.set_italic(element.style.italic)
+            font.set_underline(element.style.underline)
+
+            width, height = font.size(control.text)
+            s: pg.Surface = font.render(control.text, True, radiobutton.color)
+            box_rect: Rectangle = Rectangle.join(bounds.location + control.padding.top_left, Size(height, height))
+            text_pos: Point = box_rect.location + Point(box_rect.width, 0) + control.padding.top_left
+
+            pg.draw.ellipse(surface, radiobutton.backcolor, box_rect, 0)
+            pg.draw.ellipse(surface, radiobutton.bordercolor, box_rect, 1)
+            if control.checked:
+                pg.draw.ellipse(surface, radiobutton.checkmark.color, box_rect.shrink(3), 0)
+
+            pg.draw.rect(surface, RED, bounds, 1)
+            surface.blit(s, text_pos)
 
 class VecBase:
 
@@ -2360,6 +2375,7 @@ class ButtonBase(Control):
         return super().process_message(message, *params)
 
 
+# pbtn
 class PushButton(ButtonBase):
 
     class PressedEvent(EventBase):
@@ -2387,6 +2403,7 @@ class PushButton(ButtonBase):
         return super().process_message(message, *params)
 
 
+# cbx
 class CheckBox(ButtonBase):
 
     class CheckedEvent(EventBase):
@@ -2403,7 +2420,7 @@ class CheckBox(ButtonBase):
     def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
         super().__init__(parent, name, **kwargs)
 
-        self.checked = True
+        self.checked = False
 
     @property
     def text(self) -> str:
@@ -2467,6 +2484,7 @@ class CheckBox(ButtonBase):
                     self._on_checkchanged(self, EventArgs(check_state=CBS_CHECKED))
                 else:
                     self._pressed_state = BPS_NORMAL
+
         elif message is Message.TEXTCHANGED:
             text: str = params[0]
             self.size = self._get_base_size(text)
@@ -2488,19 +2506,104 @@ class CheckBox(ButtonBase):
             return super().process_message(message, *params)
 
 
-class ScrollableControl(Control):
-    # has display_bounds, scroll_position, scrollbars (non-clients)
-    # not necessarily a container
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
-        # client/display bounds and scrolling
-        self._display_bounds: Rectangle = Rectangle(0, 0, 32, 32)
-        
-        # non-client controls
-        self._scrollbars: Scrollbars = SB_AUTO
-        self._vscrollbar: 'VScrollbar' = None
-        self._hscrollbar: 'HScrollbar' = None
+# rbtn
+class RadioButton(ButtonBase):
 
-        super(ScrollableControl, self).__init__(parent, name, **kwargs)
+    class CheckedEvent(EventBase):
+        pass
+
+    class UncheckedEvent(EventBase):
+        pass
+
+    class CheckChangedEvent(EventBase):
+        pass
+
+    _behavior = Control._behavior | BE_FIXED_HEIGHT
+
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super().__init__(parent, name, **kwargs)
+
+        self.checked = False
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    @text.setter
+    def text(self, value: str) -> None:
+        if value != self._text:
+            self._text = value
+            self.process_message(Message.TEXTCHANGED, value)
+
+    @property
+    def check_state(self) -> CheckBoxState:
+        return {
+            BTS_OFF: CBS_UNCHECKED,
+            BTS_ON: CBS_CHECKED,
+            BTS_UNDEFINED: CBS_UNDFINED
+        }.get(self._toggle_state, CBS_UNDFINED)
+
+    @property
+    def checked(self) -> bool:
+        return self.check_state is CBS_CHECKED
+
+    @checked.setter
+    def checked(self, value: bool) -> None:
+        if value:
+            self._toggle_state = BTS_ON
+        else:
+            self._toggle_state = BTS_OFF
+
+    def check(self) -> None:
+        if self.check_state is not CBS_CHECKED:
+            self._toggle_state = BTS_ON
+            self._on_checked(self, None)
+
+    def uncheck(self) -> None:
+        if self.check_state is not CBS_UNCHECKED:
+            self._toggle_state = BTS_OFF
+            self._on_unchecked(self, None)
+
+    def _get_base_size(self, text: str) -> Size:
+        renderer: RendererBase = Application().get_renderer()
+        size: Size = renderer.measure_text(self, text)
+        size.width += self._padding.hor
+        size.height += self._padding.ver
+        size.width += size.height
+        return size
+
+    def process_message(self, message: Message, *params) -> Any:
+        if message is Message.MOUSE_RELEASE:
+            if self.enabled:
+                is_hovering: bool = params[0]
+                if is_hovering:
+                    self._pressed_state = BPS_HILIGHTED
+                    if self._toggle_state is BTS_OFF:
+                        self._toggle_state = BTS_ON
+                        self._on_checked(self, None)
+                    # self._on_checkchanged(self, EventArgs(check_state=CBS_CHECKED))
+                else:
+                    self._pressed_state = BPS_NORMAL
+
+        elif message is Message.TEXTCHANGED:
+            text: str = params[0]
+            self.size = self._get_base_size(text)
+
+        elif message is Message.SIZECHANGED:
+            size: Size = params[0]
+            if self.is_topmost:
+                UIRuntime().erase(self, Rectangle.join(self.location, size))
+            elif self._parent:
+                self.parent.process_message(Message.ERASE_CHILD, self, size)
+            base_size: Size = self._get_base_size(self._text)
+            if size.height != base_size.height:
+                size.height = base_size.height
+            if size.width < base_size.width:
+                size.width = base_size.width
+            self._bounds.size = size
+
+        else:
+            return super().process_message(message, *params)
 
 
 class ContainerControl(Control):
@@ -2745,114 +2848,8 @@ class ContainerControl(Control):
             return super().process_message(message, *params)
 
 
-#btngrp
-class ButtonGroup(Control):
-
-    _behavior: Behavior = Control._behavior | BE_FIXED_SIZE
-
-    class ItemActionEvent(EventBase):
-        pass
-
-    class ButtonGroupItem:
-
-        def __init__(self, owner: 'ButtonGroup', name: str=DEFAULT, **kwargs) -> None:
-            self._kind: ButtonGroupKind = BK_PUSHBUTTON
-            self._enabled: bool = True
-            self._pressed_state: ButtonPressedState = BPS_NORMAL
-            self._toggle_state: ButtonToggleState = BTS_OFF
-            self._caption: str = "Item"
-            self._display: ButtonGroupDisplay = BGD_ICON
-            self._tooltip: str = "Button group item."
-            self._name: str = owner.get_item_default_name(self) if name is DEFAULT else name
-
-        @property
-        def kind(self) -> 'ButtonGroupKind':
-            return self._kind
-
-        @kind.setter
-        def kind(self, value: 'ButtonGroupKind') -> None:
-            self._kind = value
-
-        @property
-        def enabled(self) -> 'bool':
-            return self._enabled
-
-        @enabled.setter
-        def enabled(self, value: bool) -> None:
-            self._enabled = value
-
-        @property
-        def pressed_state(self) -> 'ButtonPressedState':
-            return self._pressed_state
-
-        @pressed_state.setter
-        def pressed_state(self, value: 'ButtonPressedState') -> None:
-            self._pressed_state = value
-
-        @property
-        def toggled_state(self) -> 'ButtonToggleState':
-            return self._toggle_state
-
-        @toggled_state.setter
-        def toggled_state(self, value: 'ButtonToggleState') -> None:
-            self._toggle_state = value
-
-        @property
-        def caption(self) -> str:
-            return self._caption
-
-        @caption.setter
-        def caption(self, value: str) -> None:
-            self._caption = value
-
-        @property
-        def display(self) -> ButtonGroupDisplay:
-            return self._display
-
-        @display.setter
-        def display(self, value: ButtonGroupDisplay) -> None:
-            self._display = value
-
-    def __init__(self, parent: 'Control'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
-        super(ButtonGroup, self).__init__(parent, name, **kwargs)
-        self._items: List[ButtonGroup.ButtonGroupItem] = []
-        self._index: int = -1
-        self._item_counter: int = 0
-
-    @property
-    def enabled(self) -> bool:
-        if super(ButtonGroup, self).enabled:
-            return len(self._items) > 0
-
-    @enabled.setter
-    def enabled(self, value):
-        super(ButtonGroup, self).enabled = value
-
-    def get_item_default_name(self, item: 'ButtonGroup.ButtonGroupItem') -> str:
-        name: str = {
-            BK_PUSHBUTTON: 'pushbuttonitem{}',
-            BK_TOGGLEBUTTON: 'togglebuttonitem{}',
-            BK_DROPDOWNBUTTON: 'dropdownbuttonitem{}',
-        }.get(item.kind)
-        self._item_counter += 1
-        return name.format(self._item_counter)
-
-    def add(self, kind: ButtonGroupKind=BK_PUSHBUTTON, enabled: bool=True, caption: str="Item",
-            display: ButtonGroupDisplay=BGD_ICON, name:str=DEFAULT) -> None:
-        bgi: ButtonGroup.ButtonGroupItem = ButtonGroup.ButtonGroupItem(self, name)
-        bgi.kind = kind
-        bgi.enabled = enabled
-        bgi.caption = caption
-        bgi.display = display
-        if name is not DEFAULT:
-            bgi.name = name
-        self._items.append(bgi)
-
-    def process_message(self, message: Message, *params) -> Any:
-        pass
-
-
-class Panel(ContainerControl, ScrollableControl):
+# pnl
+class Panel(ContainerControl):
 
     _behavior: Behavior = ContainerControl._behavior
 
@@ -2861,6 +2858,21 @@ class Panel(ContainerControl, ScrollableControl):
 
     def get_state(self) -> str:
         return 'normal' if not self.enabled else 'disabled'
+
+
+
+class ScrollableControl(ContainerControl):
+    # has display_bounds, scroll_position, scrollbars (non-clients)
+    # not necessarily a container
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        # client/display bounds and scrolling
+        self._display_bounds: Rectangle = Rectangle(0, 0, 32, 32)
+        # non-client controls
+        self._scrollbars: Scrollbars = SB_AUTO
+        self._vscrollbar: 'VScrollbar' = None
+        self._hscrollbar: 'HScrollbar' = None
+
+        super(ScrollableControl, self).__init__(parent, name, **kwargs)
 
 
 if __name__ == '__main__':
@@ -2900,7 +2912,7 @@ if __name__ == '__main__':
                 def mouse_enter_again(sender: PushButton, evargs: EventArgs) -> None:
                     pass
 
-        with Panel(layout=LON_BELOW):
+        with Panel(layout=LON_CASCADE):
             # this.location = Point(250, 150)
             this.size = Point(500, 300)
             # this.enabled = False
@@ -2937,4 +2949,34 @@ if __name__ == '__main__':
                 def mouse_enter(sender: CheckBox, evargs: EventArgs) -> None:
                     # sender.text = repr(pg.time.get_ticks())
                     sender.parent.pushbutton2.enabled = sender.checked
+
+            with RadioButton(layout=LON_NEWLINE):
+                # this.location = Point(10, 130)
+                this.text = "This is {}".format(this.name)
+
+                @RadioButton.CheckChangedEvent.handler
+                def mouse_enter(sender: RadioButton, evargs: EventArgs) -> None:
+                    # sender.text = repr(pg.time.get_ticks())
+                    #sender.parent.pushbutton2.enabled = sender.checked
+                    pass
+
+            with RadioButton(layout=LON_BELOW):
+                # this.location = Point(10, 130)
+                this.text = "This is {}".format(this.name)
+
+                @RadioButton.CheckChangedEvent.handler
+                def mouse_enter(sender: RadioButton, evargs: EventArgs) -> None:
+                    # sender.text = repr(pg.time.get_ticks())
+                    #sender.parent.pushbutton2.enabled = sender.checked
+                    pass
+
+            with RadioButton(layout=LON_BELOW):
+                # this.location = Point(10, 130)
+                this.text = "This is {}".format(this.name)
+
+                @RadioButton.CheckChangedEvent.handler
+                def mouse_enter(sender: RadioButton, evargs: EventArgs) -> None:
+                    # sender.text = repr(pg.time.get_ticks())
+                    #sender.parent.pushbutton2.enabled = sender.checked
+                    pass
 
