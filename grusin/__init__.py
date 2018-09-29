@@ -2606,6 +2606,70 @@ class RadioButton(ButtonBase):
             return super().process_message(message, *params)
 
 
+class BarBase(Control):
+    # serve as base for scrollbars, sliderbar, progressbar
+
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super().__init__(parent, name, **kwargs)
+        self._minimum: int = 0
+        self._maximum: int = 0
+        self._value: int = 0
+        self._small_value: int = 25
+        self._large_value: int = 100
+        self._increment: int = 1
+
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    @value.setter
+    def value(self, value: int) -> None:
+        self._value = value
+
+    @property
+    def minimum(self) -> int:
+        return self._minimum
+
+    @minimum.setter
+    def minimum(self, value: int) -> None:
+        if value > self._maximum:
+            raise ValueError("Minimum value must be smaller than maximum.")
+        self._minimum = value
+
+    @property
+    def maximum(self) -> int:
+        return self._maximum
+
+    @maximum.setter
+    def maximum(self, value: int) -> None:
+        if value < self._minimum:
+            raise ValueError("Maximum value must be larger than minimum.")
+        self._maximum = value
+
+    @property
+    def length(self) -> int:
+        return self._maximum - self._minimum
+
+    @property
+    def scroll_length(self) -> int:
+        return self._large_value - self._small_value
+
+    @property
+    def scroll_pos(self) -> int:
+        return int((self._value / self.length) * self.scroll_length)
+
+    @scroll_pos.setter
+    def scroll_pos(self, value: Union[int, float]) -> None:
+        pos = max(0, min(value, self.scroll_length))
+        self._value = (pos / self.scroll_length) * self.length
+
+
+class VScrollBar(BarBase):
+
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        
+
 class ContainerControl(Control):
     # can be parent of (can contain) other controls (client and non-client)
 
@@ -2858,7 +2922,6 @@ class Panel(ContainerControl):
 
     def get_state(self) -> str:
         return 'normal' if not self.enabled else 'disabled'
-
 
 
 class ScrollableControl(ContainerControl):
