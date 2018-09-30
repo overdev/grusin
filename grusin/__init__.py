@@ -1939,7 +1939,14 @@ class Control:
                 self.parent = None
                 rt.add_control(self)
         else:
-            self.parent = parent
+            # ownership is for non-clients, parentship is for clients
+            # if ownership is defined, the owner is totaly responsible
+            # for the owned initialization, message processing, layout etc.
+            if kwargs.get('owner') is not None:
+                # prevent ADD_CHILD to be sent to parent
+                self._parent = owner
+            else:
+                self.parent = parent
         self._get_events()
         # self._auto_layout()       # remove this later
 
@@ -2667,8 +2674,18 @@ class BarBase(Control):
 
 class VScrollBar(BarBase):
 
+    _behavior: Behavior = Control._behavior |= BE_NON_CLIENT
+
+    class VSUpButton(ButtonBase):
+
+        def __init__(self, owner: 'VScrollbar'=None, name: str=DEFAULT, **kwargs) -> None:
+            super().__init__(None, name)
+            self._owner: VScrollbar = owner
+
     def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
-        
+        super().__init__(parent, name, **kwargs)
+        self._up_button: VScrollbar.VSUpButton = 
+
 
 class ContainerControl(Control):
     # can be parent of (can contain) other controls (client and non-client)
