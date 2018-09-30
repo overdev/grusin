@@ -2672,6 +2672,7 @@ class BarBase(Control):
         self._value = (pos / self.scroll_length) * self.length
 
 
+# vscrl
 class VScrollBar(BarBase):
 
     _behavior: Behavior = Control._behavior |= BE_NON_CLIENT
@@ -2679,12 +2680,97 @@ class VScrollBar(BarBase):
     class VSUpButton(ButtonBase):
 
         def __init__(self, owner: 'VScrollbar'=None, name: str=DEFAULT, **kwargs) -> None:
-            super().__init__(None, name)
-            self._owner: VScrollbar = owner
+            super().__init__(None, name, owner=owner)
 
-    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        def set_bounds(self, location: Point, length: int) -> None:
+            renderer: RendererBase = Application().get_renderer()
+            element: Namespace = renderer.get_element(self)
+            self._bounds.location = location
+            self._bounds.size = Size(element.thickness, length)
+
+    class VSSlider(ButtonBase):
+
+        def __init__(self, owner: 'VScrollbar'=None, name: str=DEFAULT, **kwargs) -> None:
+            super().__init__(None, name, owner=owner)
+
+        def set_bounds(self, location: Point, length: int) -> None:
+            renderer: RendererBase = Application().get_renderer()
+            element: Namespace = renderer.get_element(self)
+            self._bounds.location = location
+            self._bounds.size = Size(element.thickness, length)
+
+    class VSDownButton(ButtonBase):
+
+        def __init__(self, owner: 'VScrollbar'=None, name: str=DEFAULT, **kwargs) -> None:
+            super().__init__(None, name, owner=owner)
+
+        def set_bounds(self, location: Point, length: int) -> None:
+            renderer: RendererBase = Application().get_renderer()
+            element: Namespace = renderer.get_element(self)
+            self._bounds.location = location
+            self._bounds.size = Size(element.thickness, length)
+
+    def __init__(self, owner: 'Control'=None, name: str=DEFAULT, **kwargs) -> None:
         super().__init__(parent, name, **kwargs)
-        self._up_button: VScrollbar.VSUpButton = 
+        self._up_button: VScrollbar.VSUpButton = VScrollbar.VSUpButton(self)
+        self._slider: VScrollbar.VSSlider = VScrollbar.VSSlider(self)
+        self._down_button: VScrollbar.VSDownButton = VScrollbar.VSDownButton(self)
+
+    def set_bounds(self, location: Point, length: int) -> None:
+        renderer: RendererBase = Application().get_renderer()
+        element: Namespace = renderer.get_element(self)
+        self._bounds.location = location
+        self._bounds.size = Size(element.thickness, length)
+
+        self._up_button.visible = True
+        self._slider.visible = True
+        self._down_button.visible = True
+
+        if length < 2:
+            self._up_button.visible = False
+            self._slider.visible = False
+            self._down_button.visible = False
+            return
+
+        bar_length: int = length - (element.thickness * 2)
+        if bar_length > 0:
+            large_val: int = bar_length
+            small_val: int = int((self._small_value / self._large_value) * bar_length)
+            scroll_len: int = large_val - small_val
+            scroll_pos: int = int((self._value / self.length) * scroll_len)
+
+            # if the slider length is smaller than 4, hide it.
+            self._slider.visible = small_val > 4
+
+            self._up_button.set_bounds(self._bounds.location, element.thickness)
+            self._slider.set_bounds(self._bounds.location + Point(0, element.thickness + scroll_pos), small_val)
+            self._down_button.set_bounds(self._bounds.location + Point(0, bar_length), element.thickness)
+
+        else:
+            height: int = length // 2
+            self._up_button.set_bounds(self._bounds.location, height)
+            self._down_button.set_bounds(self._bounds.location + Point(0, length - height), height)
+
+    def process_message(self, message: Message, *params) -> Any:
+        if message is Message.HIT_TEST:
+            position: Point = params[0]
+
+            obj, test = None, HT_NONE
+            if self.get_bounds().contains(position):
+                obj, test = self._up_button.process_message(message, *params)
+
+                if obj is None:
+                    obj, test = self._slider.process_message(message, *params)
+
+                if obj is None:
+                    obj, test = self._down_button.process_message(message, *params)
+
+                if obj is None:
+                    return self, HT_NONCLIENT
+                else:
+                    return obj, test
+        else:
+            return super().process_message(message, *params)
 
 
 class ContainerControl(Control):
