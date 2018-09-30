@@ -401,6 +401,10 @@ class RendererBase:
             'RadioButton': 'RadioButton',
             'ButtonGroup': 'ButtonGroup',
             'Panel': 'Panel',
+            'VScrollBar': 'VScrollBar',
+            'VSUpButton': 'VSButton',
+            'VSSlider': 'VSButton',
+            'VSDownButton': 'VSButton',
         }
         if isinstance(skin, (dict, OrderedDict)):
             self._skin = Namespace(**skin)
@@ -469,7 +473,7 @@ class RendererBase:
     def get_element(self, control: 'Control') -> Optional['Namespace']:
         clsname = control.__class__.__name__
         if clsname in self._render_methods:
-            return self._skin[clsname]
+            return self._skin[self._render_methods[clsname]]
         return None
 
     def get_render_layers(self, control: 'Control') -> RenderLayer:
@@ -670,6 +674,22 @@ class RendererBase:
 
             pg.draw.rect(surface, RED, bounds, 1)
             surface.blit(s, text_pos)
+
+    def render_vscrollbar(self, control: 'VScrollbar', element: 'Namespace', surface: pg.Surface,
+                          render_bounds: 'Rectangle', bounds: 'Rectangle', layer: RenderLayer) -> None:
+
+        if layer is RL_BACKGROUND:
+            scrollbar = element[control.get_state()]
+            pg.draw.rect(surface, scrollbar.backcolor, bounds, 0)
+
+    def render_vscrollbutton(self, control: Union['VSUpButton', 'VSSlider', 'VSDownButton'], element: 'Namespace',
+                             surface: pg.Surface, render_bounds: 'Rectangle', bounds: 'Rectangle',
+                             layer: RenderLayer) -> None:
+        if layer is RL_BACKGROUND:
+            button = element[control.get_state()]
+            pg.draw.rect(surface, button.backcolor, bounds, 0)
+            pg.draw.rect(surface, button.bordercolor, bounds, 1)
+
 
 class VecBase:
 
@@ -1910,7 +1930,7 @@ class Control:
 
         self._parent: 'Control' = None
         self._name: str = rt.gen_name(self) if name is DEFAULT else name
-
+        self._nonclients: Dict[str, 'Control'] = {}
         # text
         self._tooltip: str = ""
 
@@ -1944,7 +1964,8 @@ class Control:
             # for the owned initialization, message processing, layout etc.
             if kwargs.get('owner') is not None:
                 # prevent ADD_CHILD to be sent to parent
-                self._parent = owner
+                self._parent = kwargs.get('owner')
+                self._name = self._parent.add_nonclient(self)
             else:
                 self.parent = parent
         self._get_events()
@@ -1959,6 +1980,12 @@ class Control:
             visible=self.visible,
             index=self.depth_order
         )
+
+    def __getattr__(self, name: str) -> Any:
+        if name in getattr(self, '_nonclients'):
+            return getattr(self, '_nonclients')[name]
+
+        raise AttributeError("{} type object has no '{}' attribute.".format(self.__class__.__name__, name))
 
     def __enter__(self):
         UIRuntime().enter_context(self)
@@ -2126,6 +2153,18 @@ class Control:
     #         cursor.ref = self
     #     else:
 
+    def add_nonclient(self, nonclient: 'Control') -> str:
+        if nonclient.name in self._nonclients:
+            if self._nonclients[nonclient.name] is not nonclient:
+                name: str = UIRuntime().gen_name(nonclient)
+                while name not in self._nonclients:
+                    name = UIRuntime().gen_name(nonclient)
+                self._nonclients[name] = nonclient
+                return name
+        else:
+            self._nonclients[nonclient.name] = nonclient
+        return nonclient.name
+
     def _get_events(self):
         for name in self.__class__.__dict__:
             event = self.__class__.__dict__[name]
@@ -2185,6 +2224,9 @@ class Control:
         return receiver.process_message(message, *params)
 
     def invalidate(self) -> None:
+        pass
+
+    def _render_nonclient(self, bounds: Rectangle, render_bounds: Rectangle) -> Any:
         pass
 
     #ctrlmsg
@@ -2300,6 +2342,7 @@ class Control:
                             cls=self.__class__.__name__))
                     raise this
                 renderer.render(self, render_bounds, bounds, RL_BELOW_FOREGROUND)
+            self._render_nonclient(render_bounds, bounds)
             # render code ends here
             renderer.pop_cliprect()
 
@@ -2675,7 +2718,7 @@ class BarBase(Control):
 # vscrl
 class VScrollBar(BarBase):
 
-    _behavior: Behavior = Control._behavior |= BE_NON_CLIENT
+    _behavior: Behavior = Control._behavior | BE_NON_CLIENT
 
     class VSUpButton(ButtonBase):
 
@@ -2711,10 +2754,10 @@ class VScrollBar(BarBase):
             self._bounds.size = Size(element.thickness, length)
 
     def __init__(self, owner: 'Control'=None, name: str=DEFAULT, **kwargs) -> None:
-        super().__init__(parent, name, **kwargs)
-        self._up_button: VScrollbar.VSUpButton = VScrollbar.VSUpButton(self)
-        self._slider: VScrollbar.VSSlider = VScrollbar.VSSlider(self)
-        self._down_button: VScrollbar.VSDownButton = VScrollbar.VSDownButton(self)
+        super().__init__(None, name, **kwargs)
+        self._up_button: VScrollBar.VSUpButton = VScrollBar.VSUpButton(self)
+        self._slider: VScrollBar.VSSlider = VScrollBar.VSSlider(self)
+        self._down_button: VScrollBar.VSDownButton = VScrollBar.VSDownButton(self)
 
     def set_bounds(self, location: Point, length: int) -> None:
         renderer: RendererBase = Application().get_renderer()
@@ -2750,6 +2793,22 @@ class VScrollBar(BarBase):
             height: int = length // 2
             self._up_button.set_bounds(self._bounds.location, height)
             self._down_button.set_bounds(self._bounds.location + Point(0, length - height), height)
+
+    def _render_nonclient(self, bounds: Rectangle, render_bounds: Rectangle) -> Any:
+        if self._up_button.visible:
+            self._up_button.process_message(Message.RENDER_BACKGROUND, bounds)
+            self._up_button.process_message(Message.RENDER, bounds)
+            self._up_button.process_message(Message.RENDER_FOREGROUND, bounds)
+
+        if self._slider.visible:
+            self._slider.process_message(Message.RENDER_BACKGROUND, bounds)
+            self._slider.process_message(Message.RENDER, bounds)
+            self._slider.process_message(Message.RENDER_FOREGROUND, bounds)
+
+        if self._down_button.visible:
+            self._down_button.process_message(Message.RENDER_BACKGROUND, bounds)
+            self._down_button.process_message(Message.RENDER, bounds)
+            self._down_button.process_message(Message.RENDER_FOREGROUND, bounds)
 
     def process_message(self, message: Message, *params) -> Any:
         if message is Message.HIT_TEST:
@@ -2787,8 +2846,7 @@ class ContainerControl(Control):
     def __getattr__(self, name: str) -> 'Control':
         child = self.find_by_name(name)
         if not child:
-            raise AttributeError(
-                "{cls} object has no attribute {name}".format(cls=self.__class__.__name__, name=name))
+            return super().__getattr__(name)
         return child
 
     @property
@@ -2984,6 +3042,7 @@ class ContainerControl(Control):
                             cls=self.__class__.__name__))
                     raise this
                 renderer.render(self, render_bounds, bounds, RL_BELOW_FOREGROUND)
+            self._render_nonclient(render_bounds, bounds)
             # render code ends here
             renderer.pop_cliprect()
 
@@ -3053,6 +3112,10 @@ if __name__ == '__main__':
             this.location = Point(50, 30)
             this.size = Point(500, 300)
             this.visible = True
+
+            VScrollBar(this, 'vscroll')
+
+            this.vscroll.set_bounds(Point(this.bounds.right - 16, this.bounds.top), this.bounds.height)
 
             @Panel.MouseEnterEvent.handler
             def mouse_enter(sender: Panel, evargs: EventArgs) -> None:
