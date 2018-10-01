@@ -520,18 +520,13 @@ class RendererBase:
         return pg.display.get_surface()
 
     def render(self, control: 'Control', render_bounds: 'Rectangle', bounds: 'Rectangle', layer: RenderLayer) -> None:
-        cls: Type = control.__class__.__name__
-        if cls not in self._render_methods:
-            this = GrUsInRendererError("No render key defined for {} class.".format(control.__class__.__name__))
-            raise this
-        render_key: str = self._render_methods[cls]
-        if cls not in self._skin:
+        element: Namespace = self.get_element(control)    # self._skin[render_key]
+        if element is None:
             this = GrUsInRendererError("No render data defined for {} class in {} skin.".format(
                 control.__class__.__name__,
                 self._skin.meta.name
             ))
             raise this
-        element: Namespace = self._skin[render_key]
         renderer: Callable[['Control', 'Namespace', ...], None] = getattr(self, element.method, self.fallback)
         renderer(control, element, self.get_render_target(), render_bounds, bounds, layer)
 
@@ -677,7 +672,6 @@ class RendererBase:
 
     def render_vscrollbar(self, control: 'VScrollbar', element: 'Namespace', surface: pg.Surface,
                           render_bounds: 'Rectangle', bounds: 'Rectangle', layer: RenderLayer) -> None:
-
         if layer is RL_BACKGROUND:
             scrollbar = element[control.get_state()]
             pg.draw.rect(surface, scrollbar.backcolor, bounds, 0)
@@ -1048,7 +1042,12 @@ MAGENTA = Color(255, 0, 255)
 WHITE = Color(255, 255, 255)
 
 
+# rct
 class Rectangle:
+
+    @classmethod
+    def from_origin(cls, point: 'Point', radius: int) -> 'Rectangle':
+        return cls(point.x - radius, point.y - radius, radius * 2, radius * 2)
 
     @classmethod
     def join(cls, point: 'Point', size: 'Size') -> 'Rectangle':
@@ -1699,7 +1698,11 @@ class UIRuntime(metaclass=SingletonMeta):
                 hovered = None
                 hittest = HT_NONE
                 for control in self._controls:
-                    hov, hit = control.process_message(Message.HIT_TEST, Point(*event.pos), Point(*event.rel))
+                    try:
+                        hov, hit = control.process_message(Message.HIT_TEST, Point(*event.pos), Point(*event.rel))
+                    except TypeError:
+                        print(control)
+                        sys.exit()
                     if hov:
                         hovered = hov
                         hittest = hit       # no utlilty to this ATM
@@ -1741,8 +1744,9 @@ class UIRuntime(metaclass=SingletonMeta):
                     self._release_time[event.button] = current_time
 
                 if self._drag_button == event.button and self._captured:
+                    dragged_outside: bool = not self._captured.get_bounds().contains(Point(*event.pos))
                     self._captured.process_message(
-                        Message.MOUSE_STOPDRAG, self._drag_button, self._drag_pos[self._drag_button], Point(*event.pos))
+                        Message.MOUSE_STOPDRAG, self._drag_button, self._drag_pos[self._drag_button], Point(*event.pos), dragged_outside)
 
                     if self._drag_accept:
                         package: Any = self._captured.process_message(Message.DRAG_SENDDATA)
@@ -1830,7 +1834,7 @@ class UIRuntime(metaclass=SingletonMeta):
                     if self._captured:
                         self._captured.process_message(Message.SELECTED)
                     if self._hovered:
-                        self._hovered.process_message(Message.MOUSE_PRESS)
+                        self._hovered.process_message(Message.MOUSE_PRESS, event.button, Point(*event.pos))
 
             elif event.type == pg.VIDEORESIZE:
                 pass
@@ -2226,8 +2230,15 @@ class Control:
     def invalidate(self) -> None:
         pass
 
-    def _render_nonclient(self, bounds: Rectangle, render_bounds: Rectangle) -> Any:
-        pass
+    def _render_nonclient(self, bounds: Rectangle, render_bounds: Rectangle) -> None:
+        #fullclip
+        # bounds: Rectangle = Rectangle(0, 0, 960, 540)
+        for name in self._nonclients:
+            nc: Control = self._nonclients[name]
+            if nc.visible:
+                nc.process_message(Message.RENDER_BACKGROUND, bounds)
+                nc.process_message(Message.RENDER, bounds)
+                nc.process_message(Message.RENDER_FOREGROUND, bounds)
 
     #ctrlmsg
     def process_message(self, message: Message, *params) -> Any:
@@ -2662,12 +2673,11 @@ class BarBase(Control):
     def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
         super().__init__(parent, name, **kwargs)
         self._minimum: int = 0
-        self._maximum: int = 0
+        self._maximum: int = 100
         self._value: int = 0
         self._small_value: int = 25
         self._large_value: int = 100
         self._increment: int = 1
-
 
     @property
     def value(self) -> int:
@@ -2714,6 +2724,17 @@ class BarBase(Control):
         pos = max(0, min(value, self.scroll_length))
         self._value = (pos / self.scroll_length) * self.length
 
+    def set_values(self, small_value: int=100, large_value: int=200) -> None:
+        self._small_value = small_value
+        self._large_value = large_value
+        # self._value = max(small_value, min(self._value, large_value))
+
+    def scroll_normalized(self, value: float) -> None:
+        self._value = int(self._minimum + (self._maximum - self._minimum) * (value % 1.0))
+
+    def scroll(self, value: int) -> None:
+        self._value = int(max(self._minimum, min(value, self._maximum)))
+
 
 # vscrl
 class VScrollBar(BarBase):
@@ -2753,11 +2774,11 @@ class VScrollBar(BarBase):
             self._bounds.location = location
             self._bounds.size = Size(element.thickness, length)
 
-    def __init__(self, owner: 'Control'=None, name: str=DEFAULT, **kwargs) -> None:
+    def __init__(self, parent: 'Control'=None, name: str=DEFAULT, **kwargs) -> None:
         super().__init__(None, name, **kwargs)
-        self._up_button: VScrollBar.VSUpButton = VScrollBar.VSUpButton(self)
-        self._slider: VScrollBar.VSSlider = VScrollBar.VSSlider(self)
-        self._down_button: VScrollBar.VSDownButton = VScrollBar.VSDownButton(self)
+        VScrollBar.VSUpButton(self, "_up_button")
+        VScrollBar.VSSlider(self, "_slider")
+        VScrollBar.VSDownButton(self, "_down_button")
 
     def set_bounds(self, location: Point, length: int) -> None:
         renderer: RendererBase = Application().get_renderer()
@@ -2777,38 +2798,27 @@ class VScrollBar(BarBase):
 
         bar_length: int = length - (element.thickness * 2)
         if bar_length > 0:
+            pos = self._value / (self._maximum - self._minimum)
             large_val: int = bar_length
             small_val: int = int((self._small_value / self._large_value) * bar_length)
             scroll_len: int = large_val - small_val
-            scroll_pos: int = int((self._value / self.length) * scroll_len)
+            scroll_pos: int = int(pos * scroll_len)
+            # print('->', scroll_len, pos, [self._value, self._minimum, self._maximum])
 
             # if the slider length is smaller than 4, hide it.
             self._slider.visible = small_val > 4
 
-            self._up_button.set_bounds(self._bounds.location, element.thickness)
-            self._slider.set_bounds(self._bounds.location + Point(0, element.thickness + scroll_pos), small_val)
-            self._down_button.set_bounds(self._bounds.location + Point(0, bar_length), element.thickness)
+            self._up_button.set_bounds(Point(0, 0), element.thickness)
+            self._slider.set_bounds(Point(0, element.thickness + scroll_pos), small_val)
+            self._down_button.set_bounds(Point(0, length - element.thickness), element.thickness)
 
         else:
             height: int = length // 2
-            self._up_button.set_bounds(self._bounds.location, height)
-            self._down_button.set_bounds(self._bounds.location + Point(0, length - height), height)
+            self._up_button.set_bounds(Point(0, 0), height)
+            self._down_button.set_bounds(Point(0, length - height), height)
 
-    def _render_nonclient(self, bounds: Rectangle, render_bounds: Rectangle) -> Any:
-        if self._up_button.visible:
-            self._up_button.process_message(Message.RENDER_BACKGROUND, bounds)
-            self._up_button.process_message(Message.RENDER, bounds)
-            self._up_button.process_message(Message.RENDER_FOREGROUND, bounds)
-
-        if self._slider.visible:
-            self._slider.process_message(Message.RENDER_BACKGROUND, bounds)
-            self._slider.process_message(Message.RENDER, bounds)
-            self._slider.process_message(Message.RENDER_FOREGROUND, bounds)
-
-        if self._down_button.visible:
-            self._down_button.process_message(Message.RENDER_BACKGROUND, bounds)
-            self._down_button.process_message(Message.RENDER, bounds)
-            self._down_button.process_message(Message.RENDER_FOREGROUND, bounds)
+    def _update_slider(self) -> None:
+        # set the slider position accordingly to the scroll value
 
     def process_message(self, message: Message, *params) -> Any:
         if message is Message.HIT_TEST:
@@ -2830,6 +2840,118 @@ class VScrollBar(BarBase):
                     return obj, test
         else:
             return super().process_message(message, *params)
+
+
+# hsldr
+class HSlider(BarBase):
+
+    class ValueChangingEvent(EventBase):
+        pass
+
+    class ValueChangingCancelEvent(EventBase):
+        pass
+
+    class ValueChangedEvent(EventBase):
+        pass
+
+    _behavior: Behavior = BarBase._behavior | BE_FIXED_HEIGHT
+
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super().__init__(parent, name, **kwargs)
+        self._minimum = int(kwargs.get('minimum', 0))
+        self._maximum = int(kwargs.get('maximum', 100))
+        self._value = int(kwargs.get('value', 0))
+        self._precision: int = int(kwargs.get('precision', 0))      # precision 0 results in int values
+
+        # in sliders, small and large values are used as
+        # range in the bar; small defines the beginning
+        # and large defines the end of range
+        self._small_value = int(kwargs.get('small_value', 0))
+        self._large_value = int(kwargs.get('large_value', 100))
+
+        self._drag_offset: Point = Point(0, 0)
+        self._sliding: bool = False
+
+        self.size = Size(kwargs.get('length', 100), 24)
+
+    def _get_slider_pos(self) -> 'Rectangle':
+        length: int = self.size.width
+        pos: Point = Point((self._value / (self._maximum - self._minimum)) * length, self.size.height // 2)
+        if self.size.height % 2:
+            pos.y += 1
+        return pos
+
+    def _get_slider_rect(self) -> 'Rectangle':
+        return Rectangle.from_origin(self._get_slider_pos(), 6)
+
+    def _get_bar_rect(self) -> 'Rectangle':
+        y: int = (self.size.height // 2) - 3
+        h: int = 6
+        if self.size.height % 2 != 0:
+            y -= 1
+            h += 1
+        return Rectangle(0, y, self.size.width, h)
+
+    def process_message(self, message: Message, *params) -> Any:
+        if message is Message.MOUSE_PRESS:
+            button: int = params[0]
+            position: Point = params[1]
+            local_position: Point = self.screen_to_client(position)
+            slider_rect: Rectangle = self._get_slider_rect()
+            bar_rect: Rectangle = self._get_bar_rect()
+
+            if slider_rect.contains(local_position):
+                self._drag_offset = local_position - slider_rect.location
+                self._sliding = True
+            elif bar_rect.contains(local_position):
+                value_range: int = self._maximum - self._minimum
+                value: float = local_position.x * (value_range / self.size.width)
+                old_value: int = self._value
+                self._value = round(value, self._precision)
+                if self._precision == 0:
+                    self._value = int(self._value)
+
+                self._on_valuechanged(self, EventArgs(previous=old_val, actual=self._value))
+
+        elif message is Message.MOUSE_DRAGMOVE:
+            button: int = params[0]
+            position: Point = params[1]
+            start_position: Point = params[2]
+            local_position: Point = self.screen_to_client(position)
+            slider_rect: Rectangle = self._get_slider_rect()
+            bar_rect: Rectangle = self._get_bar_rect()
+
+            if self._sliding:
+                x: int = max(0, min(local_position.x - self._drag_receiver.x, self.size.width))
+                value_range: int = self._maximum - self._minimum
+                value: float = round(x * (value_range / self.size.width), self._precision)
+                if self._precision == 0:
+                    value = int(value)
+
+                self._on_valuechanging(self, EventArgs(new=value, actual=self._value))
+
+        elif message is Message.MOUSE_STOPDRAG:
+            button: int = params[0]
+            position: Point = params[1]
+            start_position: Point = params[2]
+            dragged_outside: bool = params[3]
+            local_position: Point = self.screen_to_client(position)
+            slider_rect: Rectangle = self._get_slider_rect()
+
+            if self._sliding:
+                if not dragged_outside:
+                    x: int = max(0, min(local_position.x - self._drag_receiver.x, self.size.width))
+                    value_range: int = self._maximum - self._minimum
+                    old_value: int = self._value
+                    self._value: float = round(x * (value_range / self.size.width), self._precision)
+                    if self._precision == 0:
+                        self._value = int(self._value)
+
+                    self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
+                else:
+                    self._on_valuechangingcancel(self, None)
+
+        return super().process_message(message, *params)
 
 
 class ContainerControl(Control):
@@ -3079,8 +3201,20 @@ class Panel(ContainerControl):
 
     _behavior: Behavior = ContainerControl._behavior
 
-    # def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
-    #     super().__init__(parent, name, **kwargs)
+    def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
+        super().__init__(parent, name, **kwargs)
+
+        VScrollBar(None, 'vscroll', owner=self)
+        # Not showing due bounds being outside panel bounds. NEED TO FIX IT!
+        self.vscroll.set_values(self.bounds.height, self.bounds.height * 5)
+        self.vscroll.set_bounds(Point(500-16, 0), self.bounds.height)
+        # init
+
+    def process_message(self, message: Message, *params) -> Any:
+        if message is Message.SIZECHANGED:
+            self.vscroll.set_bounds(Point(self.size.width - 16, 0), self.size.height)
+
+        return super().process_message(message, *params)
 
     def get_state(self) -> str:
         return 'normal' if not self.enabled else 'disabled'
@@ -3112,10 +3246,6 @@ if __name__ == '__main__':
             this.location = Point(50, 30)
             this.size = Point(500, 300)
             this.visible = True
-
-            VScrollBar(this, 'vscroll')
-
-            this.vscroll.set_bounds(Point(this.bounds.right - 16, this.bounds.top), this.bounds.height)
 
             @Panel.MouseEnterEvent.handler
             def mouse_enter(sender: Panel, evargs: EventArgs) -> None:
