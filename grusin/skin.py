@@ -329,7 +329,7 @@ DEFAULT_SKIN = {
         },
         'disabled': {
             'color': (128, 128, 128),
-            'backcolor': (160, 160, 160),
+            'backcolor': (192, 192, 192),
             'bordercolor': (128, 128, 128),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
@@ -424,7 +424,7 @@ DEFAULT_SKIN = {
         'image_index': 0,
         'image_border': (2, 2, 2, 2),
         'erase_background': False,
-        'render_layers': ('BACKGROUND',),
+        'render_layers': ('BACKGROUND', 'ABOVE_BACKGROUND'),
         'style': {
             'size': 'medium',
         },
@@ -435,33 +435,37 @@ DEFAULT_SKIN = {
             'fit': True,
         },
         'normal': {
-            'backcolor': (248, 224, 224),
+            'backcolor': (192, 192, 192),
             'bordercolor': (32, 32, 32),
-            'trackcolor': (248, 248, 248),
+            'trackcolor': (64, 64, 64),
+            'forecolor': (248, 248, 248),
             'rangecolor': (32, 32, 248),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'hilighted': {
-            'backcolor': (255, 240, 240),
+            'backcolor': (192, 192, 192),
             'bordercolor': (0, 0, 0),
-            'trackcolor': (248, 248, 248),
+            'trackcolor': (64, 64, 64),
+            'forecolor': (248, 248, 248),
             'rangecolor': (32, 32, 248),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'pressed': {
-            'backcolor': (208, 184, 184),
+            'backcolor': (192, 192, 192),
             'bordercolor': (0, 0, 0),
-            'trackcolor': (248, 248, 248),
+            'trackcolor': (64, 64, 64),
+            'forecolor': (248, 248, 248),
             'rangecolor': (32, 32, 248),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
         },
         'disabled': {
-            'backcolor': (168, 152, 152),
+            'backcolor': (192, 192, 192),
             'bordercolor': (128, 128, 128),
-            'trackcolor': (248, 248, 248),
+            'trackcolor': (64, 64, 64),
+            'forecolor': (248, 248, 248),
             'rangecolor': (32, 32, 32),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
