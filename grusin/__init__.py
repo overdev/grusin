@@ -699,8 +699,8 @@ class RendererBase:
             pg.draw.rect(surface, slider.trackcolor, bar.shrink(2), 0)
 
         elif layer is RL_ABOVE_BACKGROUND:
-            marker: Rectangle = control.get_slider_rect()
-            marker.location = control.client_to_screen(marker.location)
+            marker: Rectangle = Rectangle.from_origin(control.client_to_screen(Point(control._drag_pos, 12)), 8)
+            # marker.location = control.client_to_screen(marker.location)
             pg.draw.ellipse(surface, slider.forecolor, marker, 0)
             pg.draw.ellipse(surface, slider.bordercolor, marker, 1)
 
@@ -1166,6 +1166,22 @@ class Rectangle:
     @size.setter
     def size(self, value: Size) -> None:
         self.width, self.height = value
+
+    @property
+    def center(self) -> int:
+        return self._left + (self._width // 2)
+
+    @center.setter
+    def center(self, value: int) -> None:
+        self._left = int(value - (self._width // 2))
+
+    @property
+    def middle(self) -> int:
+        return self._top + (self._height // 2)
+
+    @middle.setter
+    def middle(self, value: int) -> None:
+        self._top = int(value - (self._height // 2))
 
     @property
     def right(self) -> int:
@@ -2900,6 +2916,7 @@ class HSlider(BarBase):
         self._sliding: bool = False
 
         self.size = Size(kwargs.get('length', 100), 24)
+        self._drag_pos: int = (self._value / self.length) * self.size.width
 
     def get_slider_pos(self) -> 'Rectangle':
         length: int = self.size.width
@@ -2928,39 +2945,44 @@ class HSlider(BarBase):
             slider_rect: Rectangle = self.get_slider_rect()
             bar_rect: Rectangle = self.get_bar_rect()
 
-            if slider_rect.contains(local_position):
-                self._drag_offset = local_position - slider_rect.location
-                self._sliding = True
-                # self._sliding_value = self._value
-            elif bar_rect.contains(local_position):
-                print(slider_rect)
-                value_range: int = self._maximum - self._minimum
-                value: float = self.minimum + (local_position.x * (value_range / self.size.width))
-                old_value: int = self._value
-                self._value = round(value, self._precision)
-                if self._precision == 0:
-                    self._value = int(self._value)
+            if not self._sliding:
+                if slider_rect.contains(local_position):
+                    self._drag_offset = local_position - slider_rect.location
+                    self._sliding = True
 
-                self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
+                elif bar_rect.contains(local_position):
+                    print('clicked on slider bar')
+                    self._sliding = False
+                    self._drag_pos = local_position.x
+                    ratio: float = self._drag_pos / self.size.width
+                    old_value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
+                    if self._precision > 0:
+                        old_value = round(old_value, self._precision)
+                    else:
+                        old_value = int(old_value)
+
+                    if old_value != self._value:
+                        self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
 
         elif message is Message.MOUSE_DRAGGING:
-            # print("dragmove")
             button: int = params[0]
-            position: Point = params[1]
-            start_position: Point = params[2]
+            start_position: Point = params[1]
+            position: Point = params[2]
             local_position: Point = self.screen_to_client(position)
             slider_rect: Rectangle = self.get_slider_rect()
             bar_rect: Rectangle = self.get_bar_rect()
 
             if self._sliding:
-                x: int = max(0, min(local_position.x + self._drag_offset.x, self.size.width))
-                value_range: int = self._maximum - self._minimum
-                value: float = round(self._minimum + (x * (value_range / self.size.width)), self._precision)
-                if self._precision == 0:
+                self._drag_pos = local_position.x
+                ratio: float = self._drag_pos / self.size.width
+                value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
+                if self._precision > 0:
+                    value = round(value, self._precision)
+                else:
                     value = int(value)
-                self._sliding_value = value
 
-                self._on_valuechanging(self, EventArgs(new=value, actual=self._value))
+                if value != self._value:
+                    self._on_valuechanging(self, EventArgs(new=value, actual=self._value))
 
         elif message is Message.MOUSE_STOPDRAG:
             button: int = params[0]
@@ -2973,14 +2995,18 @@ class HSlider(BarBase):
             if self._sliding:
                 self._sliding = False
                 if not dragged_outside:
-                    x: int = max(0, min(local_position.x - self._drag_offset.x, self.size.width))
-                    value_range: int = self._maximum - self._minimum
-                    old_value: int = self._value
-                    self._value: float = round(self._minimum + (x * (value_range / self.size.width)), self._precision)
-                    if self._precision == 0:
-                        self._value = int(self._value)
+                    ratio: float = self._drag_pos / self.size.width
+                    value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
+                    if self._precision > 0:
+                        value = round(value, self._precision)
+                    else:
+                        value = int(value)
 
-                    self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
+                    old_value: Union[int, float] = self._value
+                    self._value = value
+
+                    if old_value != self._value:
+                        self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
                 else:
                     self._on_valuechangingcancel(self, None)
 
@@ -3375,9 +3401,9 @@ if __name__ == '__main__':
 
             with HSlider(layout=LON_BELOW, length=200, minimum=0, maximum=20, value=10):
 
-                @HSlider.ValueChangedEvent.handler
+                @HSlider.ValueChangingEvent.handler
                 def val_changed(sender: HSlider, evargs: EventArgs) -> None:
                     # sender.text = repr(pg.time.get_ticks())
                     #sender.parent.pushbutton2.enabled = sender.checked
-                    print('CHANGING', evargs.actual)
+                    print('CHANGING', evargs.new)
 
