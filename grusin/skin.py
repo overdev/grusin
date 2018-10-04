@@ -438,7 +438,7 @@ DEFAULT_SKIN = {
             'backcolor': (192, 192, 192),
             'bordercolor': (32, 32, 32),
             'trackcolor': (64, 64, 64),
-            'forecolor': (248, 248, 248),
+            'forecolor': (224, 224, 224),
             'rangecolor': (32, 32, 248),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
@@ -447,7 +447,7 @@ DEFAULT_SKIN = {
             'backcolor': (192, 192, 192),
             'bordercolor': (0, 0, 0),
             'trackcolor': (64, 64, 64),
-            'forecolor': (248, 248, 248),
+            'forecolor': (32, 64, 255),
             'rangecolor': (32, 32, 248),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
@@ -456,7 +456,7 @@ DEFAULT_SKIN = {
             'backcolor': (192, 192, 192),
             'bordercolor': (0, 0, 0),
             'trackcolor': (64, 64, 64),
-            'forecolor': (248, 248, 248),
+            'forecolor': (192, 192, 192),
             'rangecolor': (32, 32, 248),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'
@@ -465,7 +465,7 @@ DEFAULT_SKIN = {
             'backcolor': (192, 192, 192),
             'bordercolor': (128, 128, 128),
             'trackcolor': (64, 64, 64),
-            'forecolor': (248, 248, 248),
+            'forecolor': (160, 160, 160),
             'rangecolor': (32, 32, 32),
             'image_area': (0, 0, 1, 1),
             'image_kind': 'IMK_NINEPATCH'

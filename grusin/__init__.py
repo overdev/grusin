@@ -670,7 +670,7 @@ class RendererBase:
             if control.checked:
                 pg.draw.ellipse(surface, radiobutton.checkmark.color, box_rect.shrink(3), 0)
 
-            pg.draw.rect(surface, RED, bounds, 1)
+            # pg.draw.rect(surface, RED, bounds, 1)
             surface.blit(s, text_pos)
 
     def render_vscrollbar(self, control: 'VScrollbar', element: 'Namespace', surface: pg.Surface,
@@ -700,9 +700,9 @@ class RendererBase:
 
         elif layer is RL_ABOVE_BACKGROUND:
             marker: Rectangle = Rectangle.from_origin(control.client_to_screen(Point(control._drag_pos, 12)), 8)
-            # marker.location = control.client_to_screen(marker.location)
             pg.draw.ellipse(surface, slider.forecolor, marker, 0)
             pg.draw.ellipse(surface, slider.bordercolor, marker, 1)
+            # pg.draw.rect(surface, RED, marker, 1)
 
 
 class VecBase:
@@ -1749,11 +1749,11 @@ class UIRuntime(metaclass=SingletonMeta):
                             self._hovered.process_message(Message.MOUSE_LEAVE)
 
                         if hovered:
-                            hovered.process_message(Message.MOUSE_ENTER)
+                            hovered.process_message(Message.MOUSE_ENTER, Point(*event.pos))
                         self._hovered = hovered
 
                     elif self._hovered:
-                        self._hovered.process_message(Message.MOUSE_MOVE)
+                        self._hovered.process_message(Message.MOUSE_MOVE, Point(*event.pos))
                 else:
                     if self._drag_button == MB_NONE:
                         for button in (MB_LEFT, MB_MIDDLE, MB_RIGHT):
@@ -2912,15 +2912,15 @@ class HSlider(BarBase):
         self._large_value = int(kwargs.get('large_value', 100))
 
         self._drag_offset: Point = Point(0, 0)
-        self._sliding_value: int = 0
         self._sliding: bool = False
+        self._state: str = 'normal'
 
         self.size = Size(kwargs.get('length', 100), 24)
         self._drag_pos: int = (self._value / self.length) * self.size.width
 
     def get_slider_pos(self) -> 'Rectangle':
         length: int = self.size.width
-        x: int = self._value if not self._sliding else self._sliding_value
+        x: int = self._value
         pos: Point = Point((x / (self._maximum - self._minimum)) * length, self.size.height // 2)
         if self.size.height % 2:
             pos.y += 1
@@ -2937,64 +2937,74 @@ class HSlider(BarBase):
             h += 1
         return Rectangle(0, y, self.size.width, h)
 
+    def get_state(self) -> str:
+        if self.enabled:
+            return self._state
+        return 'disabled'
+
     def process_message(self, message: Message, *params) -> Any:
-        if message is Message.MOUSE_PRESS:
-            button: int = params[0]
-            position: Point = params[1]
-            local_position: Point = self.screen_to_client(position)
-            slider_rect: Rectangle = self.get_slider_rect()
-            bar_rect: Rectangle = self.get_bar_rect()
-
-            if not self._sliding:
+        if message is Message.MOUSE_ENTER:
+            if self.enabled:
+                position: Point = params[0]
+                local_position: Point = self.screen_to_client(position)
+                slider_rect: Rectangle = self.get_slider_rect()
                 if slider_rect.contains(local_position):
-                    self._drag_offset = local_position - slider_rect.location
-                    self._sliding = True
+                    self._state = 'hilighted'
 
-                elif bar_rect.contains(local_position):
-                    print('clicked on slider bar')
-                    self._sliding = False
-                    self._drag_pos = local_position.x
-                    ratio: float = self._drag_pos / self.size.width
-                    old_value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
-                    if self._precision > 0:
-                        old_value = round(old_value, self._precision)
-                    else:
-                        old_value = int(old_value)
+        if message is Message.MOUSE_LEAVE:
+            if self.enabled:
+                self._state = 'normal'
 
-                    if old_value != self._value:
-                        self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
+        elif message is Message.MOUSE_MOVE:
+            if self.enabled:
+                position: Point = params[0]
+                local_position: Point = self.screen_to_client(position)
+                slider_rect: Rectangle = self.get_slider_rect()
+                if slider_rect.contains(local_position):
+                    if not self._sliding:
+                        self._state = 'hilighted'
+
+        elif message is Message.MOUSE_PRESS:
+            if self.enabled:
+                button: int = params[0]
+                position: Point = params[1]
+                local_position: Point = self.screen_to_client(position)
+                slider_rect: Rectangle = self.get_slider_rect()
+                bar_rect: Rectangle = self.get_bar_rect()
+
+                if not self._sliding:
+                    if slider_rect.contains(local_position):
+                        self._drag_offset = local_position - slider_rect.location
+                        self._sliding = True
+                        self._state = 'pressed'
+
+                    elif bar_rect.contains(local_position):
+                        self._sliding = False
+                        self._drag_pos = local_position.x
+                        ratio: float = self._drag_pos / self.size.width
+                        value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
+                        if self._precision > 0:
+                            value = round(value, self._precision)
+                        else:
+                            value = int(value)
+
+                        old_value = self._value
+                        self._value = value
+
+                        if old_value != self._value:
+                            self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
 
         elif message is Message.MOUSE_DRAGGING:
-            button: int = params[0]
-            start_position: Point = params[1]
-            position: Point = params[2]
-            local_position: Point = self.screen_to_client(position)
-            slider_rect: Rectangle = self.get_slider_rect()
-            bar_rect: Rectangle = self.get_bar_rect()
+            if self.enabled:
+                button: int = params[0]
+                start_position: Point = params[1]
+                position: Point = params[2]
+                local_position: Point = self.screen_to_client(position)
+                slider_rect: Rectangle = self.get_slider_rect()
+                bar_rect: Rectangle = self.get_bar_rect()
 
-            if self._sliding:
-                self._drag_pos = local_position.x
-                ratio: float = self._drag_pos / self.size.width
-                value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
-                if self._precision > 0:
-                    value = round(value, self._precision)
-                else:
-                    value = int(value)
-
-                if value != self._value:
-                    self._on_valuechanging(self, EventArgs(new=value, actual=self._value))
-
-        elif message is Message.MOUSE_STOPDRAG:
-            button: int = params[0]
-            position: Point = params[1]
-            start_position: Point = params[2]
-            dragged_outside: bool = params[3]
-            local_position: Point = self.screen_to_client(position)
-            slider_rect: Rectangle = self.get_slider_rect()
-
-            if self._sliding:
-                self._sliding = False
-                if not dragged_outside:
+                if self._sliding:
+                    self._drag_pos = local_position.x
                     ratio: float = self._drag_pos / self.size.width
                     value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
                     if self._precision > 0:
@@ -3002,13 +3012,39 @@ class HSlider(BarBase):
                     else:
                         value = int(value)
 
-                    old_value: Union[int, float] = self._value
-                    self._value = value
+                    if value != self._value:
+                        self._on_valuechanging(self, EventArgs(new=value, actual=self._value))
 
-                    if old_value != self._value:
-                        self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
-                else:
-                    self._on_valuechangingcancel(self, None)
+        elif message is Message.MOUSE_STOPDRAG:
+            if self.enabled:
+                button: int = params[0]
+                position: Point = params[1]
+                start_position: Point = params[2]
+                dragged_outside: bool = params[3]
+                local_position: Point = self.screen_to_client(position)
+                slider_rect: Rectangle = self.get_slider_rect()
+
+                if self._sliding:
+                    self._sliding = False
+                    if slider_rect.contains(local_position):
+                        self._state = 'hilighted'
+                    else:
+                        self._state = 'normal'
+                    if not dragged_outside:
+                        ratio: float = self._drag_pos / self.size.width
+                        value: Union[int, float] = self._minimum + (self._maximum - self._minimum) * ratio
+                        if self._precision > 0:
+                            value = round(value, self._precision)
+                        else:
+                            value = int(value)
+
+                        old_value: Union[int, float] = self._value
+                        self._value = value
+
+                        if old_value != self._value:
+                            self._on_valuechanged(self, EventArgs(previous=old_value, actual=self._value))
+                    else:
+                        self._on_valuechangingcancel(self, None)
 
         return super().process_message(message, *params)
 
@@ -3263,15 +3299,15 @@ class Panel(ContainerControl):
     def __init__(self, parent: 'ContainerControl'=DEFAULT, name: str=DEFAULT, **kwargs) -> None:
         super().__init__(parent, name, **kwargs)
 
-        VScrollBar(None, 'vscroll', owner=self)
+        # VScrollBar(None, 'vscroll', owner=self)
         # Not showing due bounds being outside panel bounds. NEED TO FIX IT!
-        self.vscroll.set_values(self.bounds.height, self.bounds.height * 5)
-        self.vscroll.set_bounds(Point(500-16, 0), self.bounds.height)
+        # self.vscroll.set_values(self.bounds.height, self.bounds.height * 5)
+        # self.vscroll.set_bounds(Point(500-16, 0), self.bounds.height)
         # init
 
     def process_message(self, message: Message, *params) -> Any:
-        if message is Message.SIZECHANGED:
-            self.vscroll.set_bounds(Point(self.size.width - 16, 0), self.size.height)
+        # if message is Message.SIZECHANGED:
+        #     self.vscroll.set_bounds(Point(self.size.width - 16, 0), self.size.height)
 
         return super().process_message(message, *params)
 
